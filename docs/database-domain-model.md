@@ -1,6 +1,6 @@
 # Database Domain Model
 
-> **GIT-8** — Sprint 0B: Technical Foundation & Quality
+> **GIT-8** - Sprint 0B: Technical Foundation & Quality
 >
 > This document is the authoritative reference for the platform's
 > PostgreSQL domain model. It governs all subsequent data-access
@@ -187,11 +187,11 @@ Tenant root. Every tenant-owned resource resolves to exactly one Organization. M
 
 ### Site
 
-A physical or logical location within an Organization. Has a unique name within its organization. `isActive` controls whether the site can receive new incidents — inactive sites are retained for historical data but reject new submissions (enforced at service layer).
+A physical or logical location within an Organization. Has a unique name within its organization. `isActive` controls whether the site can receive new incidents - inactive sites are retained for historical data but reject new submissions (enforced at service layer).
 
 ### User
 
-Global identity/authentication record. Contains only authentication information (email, password hash, display name). Organization-specific roles and profiles are in separate tables. A user is not "in" an organization by virtue of the User record — that relationship is through OrganizationMembership.
+Global identity/authentication record. Contains only authentication information (email, password hash, display name). Organization-specific roles and profiles are in separate tables. A user is not "in" an organization by virtue of the User record - that relationship is through OrganizationMembership.
 
 ### OrganizationMembership
 
@@ -227,15 +227,15 @@ First-class domain entity preserving full assignment history. Each assignment is
 
 ### ProgressUpdate
 
-Structured operational progress from the assigned responsable. Has a fixed type set (PROGRESS, BLOCKED, WORK_COMPLETED). Append-only — no `updatedAt`, no edit, no delete in MVP.
+Structured operational progress from the assigned responsable. Has a fixed type set (PROGRESS, BLOCKED, WORK_COMPLETED). Append-only - no `updatedAt`, no edit, no delete in MVP.
 
 ### Comment
 
-Free-form communication on incidents. Distinct from structured ProgressUpdates and AuditEvents. Append-only — no `updatedAt`, no edit, no delete in MVP (GIT-37).
+Free-form communication on incidents. Distinct from structured ProgressUpdates and AuditEvents. Append-only - no `updatedAt`, no edit, no delete in MVP (GIT-37).
 
 ### Attachment
 
-Metadata only — binary files reside in external object storage. See §8 for storage strategy.
+Metadata only - binary files reside in external object storage. See §8 for storage strategy.
 
 ### AuditEvent
 
@@ -272,7 +272,7 @@ Lean in-app notifications for MVP workflow events. Supports UNREAD/READ state an
 
 ---
 
-## 4. Tenant Boundaries — Invariant Enforcement
+## 4. Tenant Boundaries - Invariant Enforcement
 
 Every tenant-owned resource must resolve to exactly one Organization. Cross-organization references are prevented through a combination of database constraints and service-layer validation.
 
@@ -288,7 +288,7 @@ These invariants are structurally impossible to violate at the database level:
 | Assignment's incident must belong to the same org as the assignment | Composite FK `(incidentId, organizationId)` → `Incident(id, organizationId)` |
 | Assignment's responsable must belong to the same org as the assignment | Composite FK `(responsableProfileId, organizationId)` → `ResponsableProfile(id, organizationId)` |
 
-These composite FKs require the child tables (ResponsableSite, ResponsableSpecialty, Assignment) to carry their own `organizationId` column. This denormalization is intentional — it is the mechanism that makes the database enforce org consistency.
+These composite FKs require the child tables (ResponsableSite, ResponsableSpecialty, Assignment) to carry their own `organizationId` column. This denormalization is intentional - it is the mechanism that makes the database enforce org consistency.
 
 ### Service-layer enforced
 
@@ -322,8 +322,8 @@ The architecture document (§5.1) requires the original incident submission to r
 
 The Incident table contains two conceptual records:
 
-1. **Original report** — `originalTitle`, `originalDescription`, `originalSeverity`, `originalReportedAt`
-2. **Operational record** — `title`, `description`, `severity`, `status`, `classificationNotes`, `priority`, `updatedAt`
+1. **Original report** - `originalTitle`, `originalDescription`, `originalSeverity`, `originalReportedAt`
+2. **Operational record** - `title`, `description`, `severity`, `status`, `classificationNotes`, `priority`, `updatedAt`
 
 ### Rules
 
@@ -331,9 +331,9 @@ The Incident table contains two conceptual records:
 - At creation, `originalTitle = title`, `originalDescription = description`, `originalSeverity = severity`, `originalReportedAt = createdAt`
 - After creation, the operational fields (`title`, `description`, `severity`, etc.) may evolve through triage and lifecycle transitions
 - The `original*` fields are never included in any Prisma `update()` call
-- This is a **service-layer invariant** — application code is responsible for never updating these fields
+- This is a **service-layer invariant** - application code is responsible for never updating these fields
 - A database trigger that rejects UPDATE on these columns is intentionally deferred; it can be added via a raw SQL migration if the risk profile changes
-- This is **not** database-enforced immutability — it is application-enforced, and the documentation does not claim otherwise
+- This is **not** database-enforced immutability - it is application-enforced, and the documentation does not claim otherwise
 
 ### Why frozen columns instead of a separate table
 
@@ -359,11 +359,11 @@ REASSIGNMENT_REQUESTED ──→ SUPERSEDED   (admin reassigns after decline)
 
 - An administrator creates an Assignment with status PENDING
 - The assigned responsable may ACCEPT or request REASSIGNMENT
-- Acceptance/rejection do **not** create additional Incident states — they are Assignment-level events
+- Acceptance/rejection do **not** create additional Incident states - they are Assignment-level events
 - When a new assignment is created (reassignment), the previous Assignment is marked SUPERSEDED
 - Only one Assignment should be in PENDING or ACCEPTED status for a given incident at any time
 - This single-active-assignment invariant is enforced **transactionally at the service layer**: when creating a new assignment, the service marks any existing PENDING/ACCEPTED assignment as SUPERSEDED within the same transaction
-- Historical assignments remain queryable — they are never deleted
+- Historical assignments remain queryable - they are never deleted
 - Prisma cannot express a conditional partial unique index (`WHERE status IN ('PENDING', 'ACCEPTED')`), so a database constraint is not used here
 
 ### Tenant integrity
@@ -394,12 +394,12 @@ AuditEvent stores authoritative history for meaningful operational events.
 ### Structure
 
 Each AuditEvent records:
-- `actorId` — the user who performed the action
-- `eventType` — what happened
-- `metadata` (JSON) — before/after values where applicable
-- `createdAt` — when it happened
-- `organizationId` — tenant scope
-- `incidentId` — the affected incident (optional for org-level events)
+- `actorId` - the user who performed the action
+- `eventType` - what happened
+- `metadata` (JSON) - before/after values where applicable
+- `createdAt` - when it happened
+- `organizationId` - tenant scope
+- `incidentId` - the affected incident (optional for org-level events)
 
 ### Append-only semantics
 
@@ -420,7 +420,7 @@ Binary files are stored in external object storage (S3-compatible bucket), not i
 | `fileSizeBytes` | File size for UI display and validation |
 | `storageKey` | Reference to the object in the storage bucket |
 
-Presigned URLs are the preferred upload mechanism (to be detailed in the attachments sprint). The database record and the storage object must be kept consistent — orphaned objects are a defect.
+Presigned URLs are the preferred upload mechanism (to be detailed in the attachments sprint). The database record and the storage object must be kept consistent - orphaned objects are a defect.
 
 The `storageKey` is opaque from the database's perspective. Its format (e.g., `{orgId}/{incidentId}/{uuid}.{ext}`) is determined by the attachments implementation, not by the schema.
 
@@ -541,33 +541,33 @@ The first developer to set up a local database will generate and commit the init
 
 ## 12. Compatibility Notes
 
-### GIT-13 — User self-registration
+### GIT-13 - User self-registration
 
 The User model stores global identity (email, passwordHash, displayName). OrganizationMembership links users to organizations with roles. This separation cleanly supports the registration → organization-association flow.
 
-### GIT-19 — Assignment acceptance & intervention
+### GIT-19 - Assignment acceptance & intervention
 
 The Assignment model supports PENDING → ACCEPTED and PENDING → REASSIGNMENT_REQUESTED transitions without adding Incident states. The service layer moves the Incident to IN_PROGRESS when a responsable accepts.
 
-### GIT-20 — Responsable specialties & Site access
+### GIT-20 - Responsable specialties & Site access
 
 ResponsableSpecialty and ResponsableSite are dedicated join tables with `isActive` flags for deactivation without history loss. Composite FKs enforce org consistency.
 
-### GIT-22 — Incident history and audit trail
+### GIT-22 - Incident history and audit trail
 
 AuditEvent covers all MVP event types. The `metadata` JSON field stores before/after values. The model is append-only by convention.
 
-### GIT-24 — Structured progress updates
+### GIT-24 - Structured progress updates
 
 ProgressUpdate has a fixed type enum (PROGRESS, BLOCKED, WORK_COMPLETED) and is append-only. It is distinct from Comment and AuditEvent.
 
-### GIT-37 — Incident comments
+### GIT-37 - Incident comments
 
 Comment is a separate table from ProgressUpdate. Append-only in MVP.
 
-### GIT-27 — Core workflow notifications
+### GIT-27 - Core workflow notifications
 
-Notification supports in-app UNREAD/READ state. The model does not prescribe a delivery mechanism — email/push can be added without schema changes.
+Notification supports in-app UNREAD/READ state. The model does not prescribe a delivery mechanism - email/push can be added without schema changes.
 
 ### Architecture decisions
 
