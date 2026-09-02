@@ -10,6 +10,7 @@ A secure, multi-tenant modular monolith for reporting, tracking, and managing wo
 
 - **Multi-Tenant Data Isolation:** Composite foreign keys `(id, organizationId)` enforce strict tenant boundaries directly at the PostgreSQL schema level, preventing cross-tenant leakage.
 - **Organization-Scoped Authorization:** Context-aware RBAC engine supporting `ADMINISTRATOR`, `RESPONSABLE`, and `USER` roles with site-scoping and status-driven mutation guards.
+- **Secure Authentication & Identity:** HTTP-only cookies and JWT-based session management, paired with strict server-side tenant association (GIT-13, GIT-32).
 - **Immutable Audit Trail:** Dedicated `AuditEvent` logging tracking actor, incident lifecycle changes, actions, and timestamped state diffs for compliance.
 - **Modular Monolith Workspace:** pnpm monorepo containing decoupled `backend` and `frontend` packages sharing unified linting, formatting, and TypeScript configurations.
 
@@ -64,6 +65,7 @@ Ensure your `.env` contains valid connection settings for your local PostgreSQL 
 PORT=3000
 NODE_ENV=development
 DATABASE_URL="postgresql://user:password@localhost:5432/incident_db"
+JWT_SECRET="your-secure-development-secret"
 ```
 
 ### 4. Database initialization
@@ -91,6 +93,7 @@ pnpm dev:backend
 ```
 
 - Health check endpoint: `GET http://localhost:3000/health`
+- Auth endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
 
 ### Frontend dev server (Vite on port `5173`):
 
@@ -152,6 +155,8 @@ The frontend automatically proxies `/api` requests to the backend at `http://loc
 │   │       ├── app.ts         # Express application configuration
 │   │       ├── server.ts      # HTTP server entry point
 │   │       ├── authorization/ # Organization-scoped authorization & access control
+│   │       ├── middleware/    # Express middleware (authentication)
+│   │       ├── modules/       # Domain modules (auth)
 │   │       ├── routes/        # API route handlers
 │   │       └── __tests__/     # Vitest unit & integration tests
 │   └── frontend/              # React 18 + TypeScript + Vite UI
