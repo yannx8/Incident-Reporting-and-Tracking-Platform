@@ -2,7 +2,7 @@
   "name": "incident-tracking-platform",
   "version": "0.0.1",
   "private": true,
-  "description": "Incident Reporting & Tracking Platform — monorepo root",
+  "description": "Incident Reporting & Tracking Platform - monorepo root",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20.0.0",
