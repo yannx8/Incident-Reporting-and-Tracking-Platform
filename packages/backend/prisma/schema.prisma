@@ -1,0 +1,534 @@
+// Incident Reporting & Tracking Platform — Database Domain Model
+// GIT-8: Design database domain model
+//
+// This schema defines the PostgreSQL domain model for the approved MVP.
+// See docs/database-domain-model.md for the full ERD, invariant documentation,
+// and migration strategy.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Enums
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Organization-scoped roles. A user holds a role within a specific
+/// organization via OrganizationMembership. A user may hold both USER
+/// and RESPONSABLE simultaneously in the same organization.
+enum OrgRole {
+  USER
+  RESPONSABLE
+  ADMINISTRATOR
+}
+
+/// Incident lifecycle: NEW → ASSIGNED → IN_PROGRESS → RESOLVED → CLOSED.
+/// No additional states for assignment acceptance/rejection (those live on
+/// Assignment), cancellation, reopening, SLA, or escalation.
+enum IncidentStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+/// Reporter-supplied severity at submission time. Also stored as the
+/// frozen originalSeverity on the incident.
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+/// Assignment lifecycle. PENDING → ACCEPTED is the normal path.
+/// REASSIGNMENT_REQUESTED signals the responsable has declined.
+/// SUPERSEDED marks a previous assignment replaced by a new one.
+enum AssignmentStatus {
+  PENDING
+  ACCEPTED
+  REASSIGNMENT_REQUESTED
+  SUPERSEDED
+}
+
+/// Fixed type set for structured operational progress updates (GIT-24).
+enum ProgressUpdateType {
+  PROGRESS
+  BLOCKED
+  WORK_COMPLETED
+}
+
+/// Audit event types covering the MVP lifecycle (GIT-22).
+/// New event types can be added here as later sprints ship without
+/// requiring a schema migration — only an enum migration.
+enum AuditEventType {
+  INCIDENT_CREATED
+  STATUS_CHANGE
+  CLASSIFICATION_CHANGE
+  ASSIGNMENT_CREATED
+  ASSIGNMENT_ACCEPTED
+  REASSIGNMENT_REQUESTED
+  RESOLUTION_SUBMITTED
+  INCIDENT_CLOSED
+}
+
+/// In-app notification read state.
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Organization — Tenant root
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Every tenant-owned resource resolves to exactly one Organization.
+/// MVP starts with one default Organization; the model supports
+/// multi-organization without requiring schema changes.
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sites               Site[]
+  memberships         OrganizationMembership[]
+  responsableProfiles ResponsableProfile[]
+  specialties         Specialty[]
+  incidents           Incident[]
+  auditEvents         AuditEvent[]
+  notifications       Notification[]
+
+  @@map("organizations")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Site — Belongs to exactly one Organization
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A physical or logical location within an Organization.
+/// Inactive sites cannot receive new incidents (enforced at service layer).
+/// MVP starts with one default Site.
+model Site {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  address        String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  incidents        Incident[]
+  responsableSites ResponsableSite[]
+
+  // (organizationId, name) — no duplicate site names within an org
+  @@unique([organizationId, name])
+  // Composite unique enabling structural FK from Incident, ResponsableSite
+  @@unique([id, organizationId])
+  @@map("sites")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// User — Global identity / authentication record
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Global identity. Contains authentication information only.
+/// Organization-specific role/membership is in OrganizationMembership.
+/// Organization-specific responsable profile is in ResponsableProfile.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  displayName  String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships         OrganizationMembership[]
+  responsableProfiles ResponsableProfile[]
+  reportedIncidents   Incident[]               @relation("Reporter")
+  assignmentsCreated  Assignment[]             @relation("Assigner")
+  progressUpdates     ProgressUpdate[]
+  comments            Comment[]
+  attachments         Attachment[]
+  auditEventsActed    AuditEvent[]
+  notifications       Notification[]
+
+  @@map("users")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// OrganizationMembership — Links User to Organization with a role
+// ═══════════════════════════════════════════════════════════════════════
+
+/// A user's role within a specific organization. The unique constraint
+/// on (userId, organizationId, role) allows a user to hold both USER
+/// and RESPONSABLE roles simultaneously in the same organization, each
+/// as a separate membership record.
+model OrganizationMembership {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  role           OrgRole
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([userId, organizationId, role])
+  @@index([userId])
+  @@index([organizationId, role])
+  @@map("organization_memberships")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ResponsableProfile — Organization-scoped professional profile
+// ═══════════════════════════════════════════════════════════════════════
+
+/// One per (user, organization) pair where the user holds the RESPONSABLE
+/// role. Contains professional profile information. Specialties and site
+/// access are linked through join tables.
+model ResponsableProfile {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  title          String?
+  phone          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  specialties      ResponsableSpecialty[]
+  responsableSites ResponsableSite[]
+  assignments      Assignment[]
+
+  @@unique([userId, organizationId])
+  // Composite unique enabling structural FK from Assignment, ResponsableSite,
+  // ResponsableSpecialty — ensures these children share the same org
+  @@unique([id, organizationId])
+  @@map("responsable_profiles")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Specialty — Organization-scoped specialty catalog
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Specialties are defined per organization. A responsable can have
+/// multiple specialties within their organization.
+model Specialty {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization           @relation(fields: [organizationId], references: [id])
+  responsables ResponsableSpecialty[]
+
+  @@unique([organizationId, name])
+  // Composite unique enabling structural FK from ResponsableSpecialty
+  @@unique([id, organizationId])
+  @@map("specialties")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ResponsableSpecialty — Join: ResponsableProfile ↔ Specialty
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Links a responsable to a specialty. Both must belong to the same
+/// organization — enforced structurally via composite FKs through
+/// organizationId.
+model ResponsableSpecialty {
+  id                   String   @id @default(uuid())
+  responsableProfileId String
+  specialtyId          String
+  organizationId       String
+  createdAt            DateTime @default(now())
+
+  responsableProfile ResponsableProfile @relation(fields: [responsableProfileId, organizationId], references: [id, organizationId])
+  specialty          Specialty          @relation(fields: [specialtyId, organizationId], references: [id, organizationId])
+
+  @@unique([responsableProfileId, specialtyId])
+  @@map("responsable_specialties")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ResponsableSite — Explicit site authorization for a Responsable
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Defines which sites a responsable may operate on. isActive supports
+/// activation/deactivation without deleting history (GIT-20). Only active
+/// site assignments make a responsable eligible for new incidents at
+/// that site.
+///
+/// Tenant integrity: composite FKs ensure the responsable profile and
+/// site belong to the same organization — database-enforced.
+model ResponsableSite {
+  id                   String   @id @default(uuid())
+  responsableProfileId String
+  siteId               String
+  organizationId       String
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  responsableProfile ResponsableProfile @relation(fields: [responsableProfileId, organizationId], references: [id, organizationId])
+  site               Site               @relation(fields: [siteId, organizationId], references: [id, organizationId])
+
+  @@unique([responsableProfileId, siteId])
+  @@index([siteId, isActive])
+  @@map("responsable_sites")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Incident — Operational record + frozen original report
+// ═══════════════════════════════════════════════════════════════════════
+
+/// The central domain entity. Contains both the mutable operational record
+/// and the frozen original report snapshot.
+///
+/// Original report fields (original*) are populated once at creation and
+/// MUST NEVER be updated. This is a service-layer invariant in MVP —
+/// application code must not include original* fields in any Prisma update
+/// call. A database trigger is intentionally deferred unless required.
+///
+/// Tenant integrity: composite FK (siteId, organizationId) → Site(id,
+/// organizationId) structurally guarantees the site belongs to the same
+/// organization — database-enforced.
+model Incident {
+  id             String           @id @default(uuid())
+  organizationId String
+  siteId         String
+  reporterId     String
+  status         IncidentStatus   @default(NEW)
+  severity       IncidentSeverity
+  title          String
+  description    String
+
+  // Operational fields — mutable, evolve through the incident lifecycle
+  classificationNotes String?
+  priority            Int?
+
+  // ── Original report snapshot ──────────────────────────────────────
+  // Frozen at creation. Never updated after submission.
+  // See docs/database-domain-model.md §Original Report Immutability.
+  originalTitle       String
+  originalDescription String
+  originalSeverity    IncidentSeverity
+  originalReportedAt  DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Simple FK to Organization
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // Composite FK: site must belong to the same organization
+  site         Site         @relation(fields: [siteId, organizationId], references: [id, organizationId])
+  reporter     User         @relation("Reporter", fields: [reporterId], references: [id])
+
+  assignments     Assignment[]
+  progressUpdates ProgressUpdate[]
+  comments        Comment[]
+  attachments     Attachment[]
+  auditEvents     AuditEvent[]
+  notifications   Notification[]
+
+  // Composite unique enabling structural FK from Assignment, AuditEvent,
+  // Notification — ensures these children share the same org as the incident
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, siteId])
+  @@index([reporterId])
+  @@map("incidents")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Assignment — First-class domain entity preserving full history
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Assignment is a first-class record, not a field on Incident.
+/// Each assignment is a distinct row. Reassignment creates a new
+/// Assignment and marks the old one SUPERSEDED.
+///
+/// Lifecycle: PENDING → ACCEPTED (normal path).
+/// REASSIGNMENT_REQUESTED signals the responsable has requested
+/// reassignment. SUPERSEDED marks previous assignments when a new
+/// assignment is created.
+///
+/// Only one assignment should be in PENDING or ACCEPTED status for
+/// a given incident at any time. This is enforced transactionally
+/// at the service layer — Prisma cannot express a conditional partial
+/// unique index.
+///
+/// Tenant integrity: composite FKs ensure both the incident and the
+/// responsable profile belong to the same organization — database-enforced.
+/// The service layer must additionally verify the responsable has an
+/// active ResponsableSite for the incident's site.
+model Assignment {
+  id                   String           @id @default(uuid())
+  incidentId           String
+  responsableProfileId String
+  assignedById         String
+  organizationId       String
+  status               AssignmentStatus @default(PENDING)
+  reason               String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  // Composite FK: incident must belong to the same organization
+  incident           Incident           @relation(fields: [incidentId, organizationId], references: [id, organizationId])
+  // Composite FK: responsable must belong to the same organization
+  responsableProfile ResponsableProfile @relation(fields: [responsableProfileId, organizationId], references: [id, organizationId])
+  assignedBy         User               @relation("Assigner", fields: [assignedById], references: [id])
+
+  @@index([incidentId])
+  @@index([responsableProfileId, status])
+  @@map("assignments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ProgressUpdate — Structured operational progress (GIT-24)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Structured progress from the assigned responsable. Append-only in MVP:
+/// no updatedAt, no edit, no delete. Organization scope is inherited
+/// through the incident.
+model ProgressUpdate {
+  id         String             @id @default(uuid())
+  incidentId String
+  authorId   String
+  type       ProgressUpdateType
+  content    String
+  createdAt  DateTime           @default(now())
+
+  incident Incident @relation(fields: [incidentId], references: [id])
+  author   User     @relation(fields: [authorId], references: [id])
+
+  @@index([incidentId])
+  @@map("progress_updates")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Comment — Free-form communication (GIT-37)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Lightweight free-form comments on incidents. Distinct from structured
+/// ProgressUpdates and AuditEvents. Append-only in MVP: no updatedAt,
+/// no edit, no delete. Organization scope is inherited through the incident.
+model Comment {
+  id         String   @id @default(uuid())
+  incidentId String
+  authorId   String
+  body       String
+  createdAt  DateTime @default(now())
+
+  incident Incident @relation(fields: [incidentId], references: [id])
+  author   User     @relation(fields: [authorId], references: [id])
+
+  @@index([incidentId])
+  @@map("comments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Attachment — Metadata only, no binary storage (architecture §7)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Stores metadata/reference information for files held in external
+/// object storage (S3-compatible). storageKey is the reference to the
+/// object in the storage bucket. Presigned URLs are the preferred upload
+/// mechanism (detailed in attachments sprint). Organization scope is
+/// inherited through the incident.
+model Attachment {
+  id            String   @id @default(uuid())
+  incidentId    String
+  uploaderId    String
+  fileName      String
+  mimeType      String
+  fileSizeBytes Int
+  storageKey    String
+  createdAt     DateTime @default(now())
+
+  incident Incident @relation(fields: [incidentId], references: [id])
+  uploader User     @relation(fields: [uploaderId], references: [id])
+
+  @@index([incidentId])
+  @@map("attachments")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AuditEvent — Append-only structured history (GIT-22)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Authoritative history for meaningful state changes, assignments,
+/// resolution, closure, and other security/operational events.
+///
+/// Append-only: no updatedAt. Application code must never update or
+/// delete audit events. This is a service-layer invariant.
+///
+/// metadata (JSON) stores before/after values where applicable.
+///
+/// Tenant integrity: organizationId is required and has a direct FK to
+/// Organization. incidentId is optional (some events may be org-level).
+/// When incidentId is set, the service layer must verify the incident
+/// belongs to the same organization. A composite FK is not used here
+/// because Prisma requires all composite FK fields to be optional for
+/// an optional relation, which conflicts with the required organizationId.
+model AuditEvent {
+  id             String         @id @default(uuid())
+  organizationId String
+  incidentId     String?
+  actorId        String
+  eventType      AuditEventType
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  incident     Incident?    @relation(fields: [incidentId], references: [id])
+  actor        User         @relation(fields: [actorId], references: [id])
+
+  @@index([incidentId])
+  @@index([organizationId, createdAt])
+  @@map("audit_events")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Notification — Lean in-app notifications (GIT-27)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// In-app notification for MVP workflow events. Email/push can be added
+/// later without changing the domain model. Notification recipients are
+/// determined by organization and incident authorization.
+///
+/// Tenant integrity: same rationale as AuditEvent — organizationId has
+/// a direct FK; incidentId (optional) has a simple FK. Service layer
+/// verifies org consistency when incidentId is set.
+model Notification {
+  id             String             @id @default(uuid())
+  recipientId    String
+  organizationId String
+  incidentId     String?
+  title          String
+  body           String
+  status         NotificationStatus @default(UNREAD)
+  readAt         DateTime?
+  createdAt      DateTime           @default(now())
+
+  recipient    User         @relation(fields: [recipientId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  incident     Incident?    @relation(fields: [incidentId], references: [id])
+
+  @@index([recipientId, status])
+  @@map("notifications")
+}
