@@ -14,18 +14,21 @@ export interface AuthContext {
 }
 
 /**
- * Validates authentication and constructs the Authorization context.
- * Checks for active organization membership.
+ * Constructs a trusted server-side authorization context.
+ * 
+ * SECURITY BOUNDARY: The `trustedOrganizationId` MUST NOT come from a client request payload,
+ * query parameter, or arbitrary frontend state. It must be derived securely by the authentication
+ * layer (GIT-13/GIT-32) that verifies the user's current session against the database.
  */
-export async function buildAuthContext(
+export async function constructServerSideAuthContext(
   userId: string,
-  organizationId: string,
+  trustedOrganizationId: string,
   prisma: PrismaClient
 ): Promise<AuthContext> {
   const memberships = await prisma.organizationMembership.findMany({
     where: {
       userId,
-      organizationId,
+      organizationId: trustedOrganizationId,
       isActive: true,
     },
   });
@@ -36,7 +39,7 @@ export async function buildAuthContext(
 
   return {
     userId,
-    organizationId,
+    organizationId: trustedOrganizationId,
     roles: memberships.map((m) => m.role),
   };
 }
@@ -57,20 +60,10 @@ export function hasRole(context: AuthContext, role: OrgRole): boolean {
   return context.roles.includes(role);
 }
 
-/**
- * Asserts the context has at least one of the required roles.
- */
-export function assertHasRole(context: AuthContext, roles: OrgRole[]) {
-  if (!roles.some(role => hasRole(context, role))) {
-    throw new AuthorizationError(`Requires one of the following roles: ${roles.join(', ')}`);
-  }
-}
-
 type IncidentContextFields = Pick<Incident, 'id' | 'organizationId' | 'siteId' | 'reporterId' | 'status'>;
 
 /**
  * Evaluates whether the user can access an incident based on role rules.
- * Does not check for mutation rules.
  */
 export async function canAccessIncident(
   context: AuthContext,
@@ -95,7 +88,7 @@ export async function canAccessIncident(
     hasUserAccess = true;
   }
 
-  // RESPONSABLE can access incidents on their authorized sites
+  // RESPONSABLE can access incidents on their authorized sites that are explicitly assigned to them
   if (hasRole(context, 'RESPONSABLE')) {
     const profile = await prisma.responsableProfile.findUnique({
       where: { userId_organizationId: { userId: context.userId, organizationId: context.organizationId } },
@@ -106,21 +99,16 @@ export async function canAccessIncident(
       const hasSiteAccess = profile.responsableSites.some(rs => rs.siteId === incident.siteId && rs.isActive);
       
       if (hasSiteAccess) {
-        // Must be assigned to this Responsable, or unassigned.
+        // Must be explicitly assigned to this exact Responsable. Unassigned incidents are not visible here.
         const activeAssignments = await prisma.assignment.findMany({
           where: { 
             incidentId: incident.id, 
-            status: { in: ['PENDING', 'ACCEPTED'] } 
+            status: { in: ['PENDING', 'ACCEPTED'] },
+            responsableProfileId: profile.id
           }
         });
 
         if (activeAssignments.length > 0) {
-          // If assigned to anyone, must be assigned to me
-          if (activeAssignments.some(a => a.responsableProfileId === profile.id)) {
-            hasResponsableAccess = true;
-          }
-        } else {
-          // Unassigned, site access is enough
           hasResponsableAccess = true;
         }
       }
@@ -133,7 +121,7 @@ export async function canAccessIncident(
 /**
  * Asserts the user can read the incident.
  */
-export async function assertCanReadIncident(
+export async function assertCanAccessIncident(
   context: AuthContext,
   incident: IncidentContextFields,
   prisma: PrismaClient
@@ -144,18 +132,9 @@ export async function assertCanReadIncident(
 }
 
 /**
- * Asserts the user can update the incident with the given payload.
+ * Asserts that the payload does not attempt to modify immutable original report fields.
  */
-export async function assertCanUpdateIncident(
-  context: AuthContext,
-  incident: IncidentContextFields,
-  updatePayload: Partial<Incident>,
-  prisma: PrismaClient
-) {
-  // First, verify read access implies base access
-  await assertCanReadIncident(context, incident, prisma);
-
-  // User cannot modify the original submitted incident details
+export function assertOriginalReportImmutable(updatePayload: Partial<Incident>) {
   const originalFields: Array<keyof Incident> = [
     'originalTitle', 
     'originalDescription', 
@@ -167,9 +146,15 @@ export async function assertCanUpdateIncident(
   if (attemptingToModifyOriginal) {
     throw new AuthorizationError('Cannot modify the original submitted incident report.');
   }
+}
 
-  // Only Administrator may close an incident
-  if (updatePayload.status === 'CLOSED' && !hasRole(context, 'ADMINISTRATOR')) {
+/**
+ * Asserts the user has the required permissions to close an incident.
+ */
+export function assertCanCloseIncident(context: AuthContext, incident: IncidentContextFields) {
+  checkOrganizationOwnership(context, incident.organizationId);
+
+  if (!hasRole(context, 'ADMINISTRATOR')) {
     throw new AuthorizationError('Only Administrators may close incidents.');
   }
 }
@@ -177,7 +162,9 @@ export async function assertCanUpdateIncident(
 /**
  * Asserts the user can delete the incident.
  */
-export function assertCanDeleteIncident(context: AuthContext) {
+export function assertCanDeleteIncident(context: AuthContext, incident: IncidentContextFields) {
+  checkOrganizationOwnership(context, incident.organizationId);
+
   if (!hasRole(context, 'ADMINISTRATOR')) {
     throw new AuthorizationError('Only Administrators can delete incidents.');
   }

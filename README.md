@@ -151,7 +151,7 @@ The frontend automatically proxies `/api` requests to the backend at `http://loc
 │   │   └── src/
 │   │       ├── app.ts         # Express application configuration
 │   │       ├── server.ts      # HTTP server entry point
-│   │       ├── authz/         # Organization-scoped authorization & RBAC guards
+│   │       ├── authorization/ # Organization-scoped authorization & access control
 │   │       ├── routes/        # API route handlers
 │   │       └── __tests__/     # Vitest unit & integration tests
 │   └── frontend/              # React 18 + TypeScript + Vite UI
