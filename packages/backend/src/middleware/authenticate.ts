@@ -28,7 +28,11 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const secret = process.env.JWT_SECRET || 'fallback-secret-for-development';
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      console.error('JWT_SECRET is not set in environment variables');
+      return res.status(500).json({ error: 'Internal server error' });
+    }
     
     // Verify token
     const decoded = jwt.verify(token, secret) as { userId: string };

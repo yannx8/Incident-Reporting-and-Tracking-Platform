@@ -10,7 +10,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   displayName: z.string().min(2),
-  organizationId: z.string().uuid()
+  joinCode: z.string().min(1)
 });
 
 const loginSchema = z.object({
@@ -19,7 +19,10 @@ const loginSchema = z.object({
 });
 
 const generateToken = (userId: string): string => {
-  const secret = process.env.JWT_SECRET || 'fallback-secret-for-development';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not set');
+  }
   return jwt.sign({ userId }, secret, { expiresIn: '1d' });
 };
 
@@ -30,16 +33,23 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid input', details: parsed.error.format() });
     }
 
-    const { email, password, displayName, organizationId } = parsed.data;
+    const { email, password, displayName, joinCode } = parsed.data;
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(409).json({ error: 'User with this email already exists' });
     }
 
-    const org = await prisma.organization.findUnique({ where: { id: organizationId } });
-    if (!org) {
-      return res.status(400).json({ error: 'Invalid organization ID' });
+    const invitation = await prisma.organizationInvitation.findUnique({
+      where: { code: joinCode }
+    });
+
+    if (!invitation) {
+      return res.status(400).json({ error: 'Invalid join code' });
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'Join code has expired' });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -51,9 +61,8 @@ export const register = async (req: Request, res: Response) => {
         passwordHash,
         memberships: {
           create: {
-            organizationId,
+            organizationId: invitation.organizationId,
             role: 'USER',
-            // Default to inactive pending verification per GIT-13
             isActive: false 
           }
         }
@@ -63,14 +72,32 @@ export const register = async (req: Request, res: Response) => {
       }
     });
 
-    const token = generateToken(user.id);
+    const membership = user.memberships[0];
+    if (!membership) {
+      throw new Error('Membership was not created');
+    }
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000 // 1 day
+    await prisma.auditEvent.create({
+      data: {
+        eventType: 'MEMBER_REGISTERED',
+        organizationId: membership.organizationId,
+        actorId: user.id,
+        metadata: { role: membership.role }
+      }
     });
+
+    // Generate a temporary verification token (in a real app this goes to email)
+    const verificationToken = jwt.sign(
+      { membershipId: membership.id }, 
+      process.env.JWT_SECRET as string, 
+      { expiresIn: '24h' }
+    );
+
+    const safeMemberships = user.memberships.map((m) => ({
+      organizationId: m.organizationId,
+      role: m.role,
+      isActive: m.isActive
+    }));
 
     return res.status(201).json({
       message: 'Registration successful. Account pending verification.',
@@ -78,8 +105,9 @@ export const register = async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         displayName: user.displayName,
-        memberships: user.memberships
-      }
+        memberships: safeMemberships
+      },
+      verificationToken // returned for MVP testing purposes since we don't have email
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -110,6 +138,11 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    const hasActiveMembership = user.memberships.some((m) => m.isActive);
+    if (!hasActiveMembership) {
+      return res.status(403).json({ error: 'Account pending verification' });
+    }
+
     const token = generateToken(user.id);
 
     res.cookie('token', token, {
@@ -119,13 +152,19 @@ export const login = async (req: Request, res: Response) => {
       maxAge: 24 * 60 * 60 * 1000
     });
 
+    const safeMemberships = user.memberships.map((m) => ({
+      organizationId: m.organizationId,
+      role: m.role,
+      isActive: m.isActive
+    }));
+
     return res.status(200).json({
       message: 'Login successful',
       user: {
         id: user.id,
         email: user.email,
         displayName: user.displayName,
-        memberships: user.memberships
+        memberships: safeMemberships
       }
     });
   } catch (error) {
@@ -156,10 +195,71 @@ export const me = async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'User not found' });
   }
 
+  const safeMemberships = user.memberships.map((m) => ({
+    organizationId: m.organizationId,
+    role: m.role,
+    isActive: m.isActive
+  }));
+
   return res.status(200).json({
     id: user.id,
     email: user.email,
     displayName: user.displayName,
-    memberships: user.memberships
+    memberships: safeMemberships
   });
+};
+
+const verifySchema = z.object({
+  token: z.string()
+});
+
+export const verify = async (req: Request, res: Response) => {
+  try {
+    const parsed = verifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid input' });
+    }
+
+    const { token } = parsed.data;
+    const secret = process.env.JWT_SECRET as string;
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, secret) as { membershipId: string };
+    } catch {
+      return res.status(401).json({ error: 'Invalid or expired verification token' });
+    }
+
+    const membership = await prisma.organizationMembership.findUnique({
+      where: { id: decoded.membershipId },
+      include: { user: true }
+    });
+
+    if (!membership) {
+      return res.status(404).json({ error: 'Membership not found' });
+    }
+
+    if (membership.isActive) {
+      return res.status(200).json({ message: 'Account is already verified' });
+    }
+
+    await prisma.organizationMembership.update({
+      where: { id: membership.id },
+      data: { isActive: true }
+    });
+
+    await prisma.auditEvent.create({
+      data: {
+        eventType: 'MEMBER_VERIFIED',
+        organizationId: membership.organizationId,
+        actorId: membership.userId,
+        metadata: { role: membership.role }
+      }
+    });
+
+    return res.status(200).json({ message: 'Account verified successfully. You may now log in.' });
+  } catch (error) {
+    console.error('Verification error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 };
