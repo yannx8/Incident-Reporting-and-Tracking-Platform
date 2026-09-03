@@ -76,6 +76,8 @@ enum AuditEventType {
   REASSIGNMENT_REQUESTED
   RESOLUTION_SUBMITTED
   INCIDENT_CLOSED
+  MEMBER_REGISTERED
+  MEMBER_VERIFIED
 }
 
 /// In-app notification read state.
@@ -105,8 +107,22 @@ model Organization {
   incidents           Incident[]
   auditEvents         AuditEvent[]
   notifications       Notification[]
+  invitations         OrganizationInvitation[]
 
   @@map("organizations")
+}
+
+/// Short-lived invitation codes for controlled organization association during registration.
+model OrganizationInvitation {
+  id             String       @id @default(uuid())
+  code           String       @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@map("organization_invitations")
 }
 
 // ═══════════════════════════════════════════════════════════════════════
