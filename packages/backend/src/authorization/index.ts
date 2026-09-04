@@ -169,3 +169,12 @@ export function assertCanDeleteIncident(context: AuthContext, incident: Incident
     throw new AuthorizationError('Only Administrators can delete incidents.');
   }
 }
+
+/**
+ * Asserts that the user is an Administrator.
+ */
+export function assertIsAdministrator(context: AuthContext) {
+  if (!hasRole(context, 'ADMINISTRATOR')) {
+    throw new AuthorizationError('Only Administrators can perform this action.');
+  }
+}

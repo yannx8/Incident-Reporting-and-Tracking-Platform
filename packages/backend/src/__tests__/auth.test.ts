@@ -25,7 +25,10 @@ vi.mock('@prisma/client', () => {
       create: vi.fn()
     }
   };
-  return { PrismaClient: vi.fn(() => mPrismaClient) };
+  return { 
+    PrismaClient: vi.fn(() => mPrismaClient),
+    OrgRole: { ADMINISTRATOR: 'ADMINISTRATOR', USER: 'USER', RESPONSABLE: 'RESPONSABLE' }
+  };
 });
 
 const prisma = new PrismaClient();
