@@ -9,3 +9,11 @@ export const createIncidentSchema = z.object({
 });
 
 export type CreateIncidentInput = z.infer<typeof createIncidentSchema>;
+
+export const triageIncidentSchema = z.object({
+  classificationNotes: z.string().optional(),
+  priority: z.number().int().min(1).max(4).optional(),
+  requiredSpecialtyId: z.string().uuid('Invalid specialty ID').optional()
+});
+
+export type TriageIncidentInput = z.infer<typeof triageIncidentSchema>;

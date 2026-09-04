@@ -252,6 +252,7 @@ model Specialty {
 
   organization Organization           @relation(fields: [organizationId], references: [id])
   responsables ResponsableSpecialty[]
+  incidents    Incident[]
 
   @@unique([organizationId, name])
   // Composite unique enabling structural FK from ResponsableSpecialty
@@ -337,6 +338,7 @@ model Incident {
   // Operational fields - mutable, evolve through the incident lifecycle
   classificationNotes String?
   priority            Int?
+  requiredSpecialtyId String?
 
   // ── Original report snapshot ──────────────────────────────────────
   // Frozen at creation. Never updated after submission.
@@ -351,10 +353,14 @@ model Incident {
   updatedAt DateTime @updatedAt
 
   // Simple FK to Organization
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization      Organization @relation(fields: [organizationId], references: [id])
   // Composite FK: site must belong to the same organization
-  site         Site         @relation(fields: [siteId, organizationId], references: [id, organizationId])
-  reporter     User         @relation("Reporter", fields: [reporterId], references: [id])
+  site              Site         @relation(fields: [siteId, organizationId], references: [id, organizationId])
+  reporter          User         @relation("Reporter", fields: [reporterId], references: [id])
+  // Simple FK: requiredSpecialty. Tenant integrity (specialty belongs to the 
+  // same organization) must be verified at the service layer because Prisma 
+  // requires all composite FK fields to be optional for an optional relation.
+  requiredSpecialty Specialty?   @relation(fields: [requiredSpecialtyId], references: [id])
 
   assignments     Assignment[]
   progressUpdates ProgressUpdate[]

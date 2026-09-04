@@ -11,6 +11,10 @@ describe('Incidents API', () => {
   let testOrg: any;
   let testSite: any;
   let authToken: string;
+  let adminToken: string;
+  let testSpecialty: any;
+  let testIncident: any;
+  let adminUser: any;
 
   beforeAll(async () => {
     // 1. Create Organization
@@ -52,15 +56,64 @@ describe('Incidents API', () => {
     // 5. Generate Auth Token
     process.env.JWT_SECRET = 'test-secret';
     authToken = jwt.sign({ userId: testUser.id }, process.env.JWT_SECRET);
+
+    // 5. Create Admin User
+    adminUser = await prisma.user.create({
+      data: {
+        email: `admin-${Date.now()}@incidents.com`,
+        displayName: 'Test Admin',
+        passwordHash: 'dummy_hash',
+      }
+    });
+
+    await prisma.organizationMembership.create({
+      data: {
+        userId: adminUser.id,
+        organizationId: testOrg.id,
+        role: 'ADMINISTRATOR',
+        isActive: true
+      }
+    });
+
+    adminToken = jwt.sign({ userId: adminUser.id }, process.env.JWT_SECRET);
+    
+    // 6. Create a specialty for triage test
+    testSpecialty = await prisma.specialty.create({
+      data: {
+        organizationId: testOrg.id,
+        name: 'Plumbing',
+      }
+    });
+
+    // 7. Create an incident for triage tests
+    testIncident = await prisma.incident.create({
+      data: {
+        organizationId: testOrg.id,
+        siteId: testSite.id,
+        reporterId: testUser.id,
+        status: 'NEW',
+        severity: 'HIGH',
+        title: 'Triage Me',
+        description: 'Needs triage',
+        category: 'MAINTENANCE',
+        originalTitle: 'Triage Me',
+        originalDescription: 'Needs triage',
+        originalCategory: 'MAINTENANCE',
+        originalSeverity: 'HIGH',
+        originalReportedAt: new Date()
+      }
+    });
   });
 
   afterAll(async () => {
     // Cleanup
-    await prisma.auditEvent.deleteMany({ where: { actorId: testUser.id } });
-    await prisma.incident.deleteMany({ where: { reporterId: testUser.id } });
-    await prisma.site.delete({ where: { id: testSite.id } });
-    await prisma.organizationMembership.deleteMany({ where: { userId: testUser.id } });
-    await prisma.user.delete({ where: { id: testUser.id } });
+    await prisma.auditEvent.deleteMany({});
+    await prisma.assignment.deleteMany({});
+    await prisma.incident.deleteMany({ where: { organizationId: testOrg.id } });
+    await prisma.specialty.deleteMany({ where: { organizationId: testOrg.id } });
+    await prisma.site.deleteMany({ where: { organizationId: testOrg.id } });
+    await prisma.organizationMembership.deleteMany({ where: { userId: { in: [testUser.id, adminUser.id] } } });
+    await prisma.user.deleteMany({ where: { id: { in: [testUser.id, adminUser.id] } } });
     await prisma.organization.delete({ where: { id: testOrg.id } });
     await prisma.$disconnect();
   });
@@ -162,5 +215,57 @@ describe('Incidents API', () => {
     expect(Array.isArray(response.body.incidents)).toBe(true);
     expect(response.body.incidents.length).toBeGreaterThanOrEqual(1);
     expect(response.body.incidents[0].title).toBe('Water Leak');
+  });
+
+  describe('PATCH /api/incidents/:id/triage', () => {
+    it('should allow ADMINISTRATOR to triage an incident', async () => {
+      const payload = {
+        classificationNotes: 'Assigned to plumbing',
+        priority: 1,
+        requiredSpecialtyId: testSpecialty.id
+      };
+
+      const response = await request(app)
+        .patch(`/api/incidents/${testIncident.id}/triage`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-organization-id', testOrg.id)
+        .send(payload);
+
+      expect(response.status).toBe(200);
+      expect(response.body.incident.classificationNotes).toBe('Assigned to plumbing');
+      expect(response.body.incident.priority).toBe(1);
+      expect(response.body.incident.requiredSpecialtyId).toBe(testSpecialty.id);
+    });
+
+    it('should reject non-ADMINISTRATOR from triaging', async () => {
+      const response = await request(app)
+        .patch(`/api/incidents/${testIncident.id}/triage`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .set('x-organization-id', testOrg.id)
+        .send({ priority: 2 });
+
+      expect(response.status).toBe(403);
+    });
+
+    it('should reject triage with a specialty from another organization', async () => {
+      const otherOrg = await prisma.organization.create({
+        data: { name: 'Other Org 2', slug: `other-org-2-${Date.now()}` }
+      });
+      const otherSpecialty = await prisma.specialty.create({
+        data: { organizationId: otherOrg.id, name: 'Other Specialty' }
+      });
+
+      const response = await request(app)
+        .patch(`/api/incidents/${testIncident.id}/triage`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-organization-id', testOrg.id)
+        .send({ requiredSpecialtyId: otherSpecialty.id });
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Specialty does not belong to your organization');
+      
+      await prisma.specialty.delete({ where: { id: otherSpecialty.id }});
+      await prisma.organization.delete({ where: { id: otherOrg.id }});
+    });
   });
 });
