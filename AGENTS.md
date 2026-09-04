@@ -8,6 +8,7 @@
 ## Git & Branch Hygiene (GitHub Flow)
 
 - **Strict GitHub Flow:** Always branch off up-to-date `main`. Name branches `feature/<ticket>-<slug>` or `fix/<ticket>-<slug>`.
+- **Mandatory User Approval:** Explicit user approval is strictly required before executing any `git commit`, `git merge`, or `git push` operation. Never commit, merge, or push without asking and receiving approval first.
 - **Zero Stale Branches:** Never leave merged branches in the repository. As soon as a branch is merged into `main`, delete both the remote and local branch immediately.
 - **Conventional Commits:** Write atomic commits using the format `<type>(<scope>): <summary>` (e.g., `feat(incidents): add category validation (GIT-16)`). Never use em dashes in commit messages.
 - **Prune Remote Tracking:** Periodically run `git fetch --prune` to keep local branch references in sync with GitHub.
