@@ -332,6 +332,7 @@ model Incident {
   severity       IncidentSeverity
   title          String
   description    String
+  category       String
 
   // Operational fields - mutable, evolve through the incident lifecycle
   classificationNotes String?
@@ -342,6 +343,7 @@ model Incident {
   // See docs/database-domain-model.md §Original Report Immutability.
   originalTitle       String
   originalDescription String
+  originalCategory    String
   originalSeverity    IncidentSeverity
   originalReportedAt  DateTime
 

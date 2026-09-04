@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { healthRouter } from './routes/health.js';
 import { authRouter } from './modules/auth/auth.routes.js';
+import { incidentsRouter } from './modules/incidents/incidents.routes.js';
 
 export const app: Express = express();
 
@@ -14,3 +15,4 @@ app.use(cookieParser());
 
 app.use('/health', healthRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/incidents', incidentsRouter);
