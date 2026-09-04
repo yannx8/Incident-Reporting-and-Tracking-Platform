@@ -39,3 +39,8 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Patches and temporary diffs
+*.patch
+diff_output.txt
+
