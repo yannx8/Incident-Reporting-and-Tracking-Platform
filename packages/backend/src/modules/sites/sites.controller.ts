@@ -88,7 +88,6 @@ export const updateSite = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Validation failed', details: parsedData.error.issues });
     }
 
-    // Check if site exists and belongs to the organization
     const site = await prisma.site.findUnique({
       where: { id: siteId },
     });

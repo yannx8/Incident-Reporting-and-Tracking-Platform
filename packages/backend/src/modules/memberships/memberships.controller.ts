@@ -56,13 +56,11 @@ export const assignRole = async (req: Request, res: Response) => {
 
     const { userId, role } = parsedData.data;
 
-    // Check if user exists
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Upsert membership
     const membership = await prisma.organizationMembership.upsert({
       where: {
         userId_organizationId_role: {
@@ -168,11 +166,6 @@ export const assignResponsableSite = async (req: Request, res: Response) => {
 
     assertIsAdministrator(authContext);
 
-    // Reusing :id as membershipId? Wait, the route says:
-    // POST /memberships/:id/sites
-    // Let's assume :id is the user's ID or profile ID.
-    // In plan: `POST /memberships/:id/sites: Authenticated, Administrator only (Assigns a site to a responsable).`
-    // Let's assume :id is the `responsableProfileId` or `userId`. I'll assume it's `responsableProfileId`.
     const profileId = req.params.id as string;
 
     const parsedData = AssignSiteToResponsableSchema.safeParse(req.body);

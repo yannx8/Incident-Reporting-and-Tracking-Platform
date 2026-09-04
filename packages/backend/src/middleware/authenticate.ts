@@ -4,7 +4,6 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Add user to the Express Request interface
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
@@ -34,14 +33,12 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       return res.status(500).json({ error: 'Internal server error' });
     }
     
-    // Verify token
     const decoded = jwt.verify(token, secret) as { userId: string };
     
     if (!decoded || !decoded.userId) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    // Ensure the user actually exists
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId }
     });
