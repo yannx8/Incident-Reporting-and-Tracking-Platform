@@ -4,7 +4,6 @@ description: Maintains and reconciles the complete Linear state of the project, 
 subagent: true
 model: pro
 tools:
-  - call_mcp_tool
   - view_file
   - grep_search
   - run_command
