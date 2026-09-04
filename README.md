@@ -16,6 +16,15 @@ A secure, multi-tenant modular monolith for reporting, tracking, and managing wo
 
 ---
 
+## Features
+
+- **Authentication & Registration:** Secure user onboarding and session management with JWT and HTTP-only cookies.
+- **Incident Management:** Create and list workplace safety incidents.
+- **Site Management:** Create, list, and update operational sites.
+- **Role & Access Control:** Assign and revoke roles (`ADMINISTRATOR`, `RESPONSABLE`, `USER`) and manage site-specific responsibilities.
+
+---
+
 ## Prerequisites
 
 | Tool | Required Version | Purpose |
@@ -92,8 +101,11 @@ Start both servers concurrently in separate terminals:
 pnpm dev:backend
 ```
 
-- Health check endpoint: `GET http://localhost:3000/health`
-- Auth endpoints: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
+- **Health:** `GET /health`
+- **Auth:** `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
+- **Incidents:** `POST /api/incidents`, `GET /api/incidents`
+- **Sites:** `POST /api/sites`, `GET /api/sites`, `PATCH /api/sites/:id`
+- **Memberships:** `GET /api/memberships`, `POST /api/memberships`, `PATCH /api/memberships/:id/revoke`, `POST /api/memberships/:id/sites`, `DELETE /api/memberships/:id/sites/:siteId`
 
 ### Frontend dev server (Vite on port `5173`):
 
