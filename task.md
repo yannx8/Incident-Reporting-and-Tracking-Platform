@@ -26,3 +26,6 @@
   - [x] Update `listIncidents` in `incidents.controller.ts` to support filtering and search
 - [x] Test & Validate
   - [x] Write integration tests for new endpoints in `packages/backend/src/modules/incidents/__tests__`
+
+## Frontend Rebuild
+- [x] Phase 1: Core UI components & CoreLayout
