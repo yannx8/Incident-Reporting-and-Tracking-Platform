@@ -1,10 +1,41 @@
 import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { CoreLayout } from './layouts/CoreLayout';
+import { AuthLayout } from './layouts/AuthLayout';
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
+import { VerifyPage } from './pages/VerifyPage';
+import { IncidentListPage } from './pages/IncidentListPage';
+import { NewIncidentPage } from './pages/NewIncidentPage';
+import { IncidentDetailPage } from './pages/IncidentDetailPage';
+
+import { AdminDashboard } from './pages/AdminDashboard';
+import { ResponsableDashboard } from './pages/ResponsableDashboard';
+import { ResponsableIncidentPage } from './pages/ResponsableIncidentPage';
 
 function App(): React.JSX.Element {
   return (
-    <div>
-      <h1>Incident Reporting &amp; Tracking Platform</h1>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<AuthLayout />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify" element={<VerifyPage />} />
+        </Route>
+        <Route element={<CoreLayout />}>
+          <Route path="/" element={<Navigate to="/incidents" replace />} />
+          <Route path="/incidents" element={<IncidentListPage />} />
+          <Route path="/incidents/new" element={<NewIncidentPage />} />
+          <Route path="/incidents/:id" element={<IncidentDetailPage />} />
+          
+          <Route path="/admin" element={<AdminDashboard />} />
+          
+          <Route path="/responsable" element={<ResponsableDashboard />} />
+          <Route path="/responsable/incidents/:id" element={<ResponsableIncidentPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
