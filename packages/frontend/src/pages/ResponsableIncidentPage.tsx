@@ -1,163 +1,220 @@
 import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, Play, UserPlus, Upload, Camera } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useIncident } from '../api/incidents';
+import { categoryIcons, priorityMeta, statusMeta, formatDate, formatTime, relativeTime } from '../lib/mockData';
+import { ArrowLeft, ChevronRight, CheckCircle2, Paperclip, Send, MapPin, UserPlus, PlayCircle, Check, Activity, AlertTriangle, LucideIcon } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import { Status, Priority } from '../types';
 
-// Mock data
-const mockIncident = { 
-  id: '2', 
-  title: 'Unauthorized Access Attempt', 
-  status: 'OPEN', 
-  severity: 'HIGH', 
-  category: 'Security', 
-  date: '2026-09-07',
-  description: 'An individual attempted to access the restricted server room without proper clearance.',
-  reportedBy: 'John Doe',
-  location: 'Server Room A',
-};
+function PriorityBadge({ priority }: { priority: Priority }) {
+  return <span className={`priority-badge ${priorityMeta[priority].className}`}><i />{priorityMeta[priority].label}</span>;
+}
+
+function StatusBadge({ status }: { status: Status }) {
+  return <span className={`status-badge ${statusMeta[status].className}`}><i />{statusMeta[status].label}</span>;
+}
+
+function StatusIcon({ status }: { status: Status }) {
+  if (status === 'CLOSED') return <Check size={14} />;
+  if (status === 'RESOLVED') return <CheckCircle2 size={14} />;
+  if (status === 'NEW') return <AlertTriangle size={14} />;
+  return <Activity size={14} />;
+}
 
 export function ResponsableIncidentPage() {
-  const { id } = useParams();
-  const [status, setStatus] = useState(mockIncident.status);
-  const [resolutionNotes, setResolutionNotes] = useState('');
-  
-  // Note: For demonstration purposes we just modify state
-  
-  const handleAssignToMe = () => {
-    // API call to assign would go here
-    alert('Incident assigned to you.');
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { data: incident, isLoading, error } = useIncident(id || '');
+  const [comment, setComment] = useState('');
+
+  if (isLoading) return <div className="p-8">Chargement...</div>;
+  if (error || !incident) return <div className="p-8">Incident introuvable.</div>;
+
+  const Icon = categoryIcons[incident.category];
+
+  // Action labels for status transitions available to the responsable
+  const actionLabel: Partial<Record<Status, string>> = {
+    ASSIGNED: "Accepter et demarrer l'intervention",
+    IN_PROGRESS: 'Proposer la resolution',
+    RESOLVED: "Cloture l'incident",
   };
 
-  const handleMarkInProgress = () => {
-    setStatus('IN_PROGRESS');
+  const ActionIcon: Partial<Record<Status, LucideIcon>> = {
+    ASSIGNED: PlayCircle,
+    IN_PROGRESS: CheckCircle2,
+    RESOLVED: Check,
   };
 
-  const handleResolve = () => {
-    setStatus('RESOLVED');
-  };
+  const CurrentActionIcon = incident.status !== 'CLOSED' ? (ActionIcon[incident.status] ?? UserPlus) : null;
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:p-6">
-      <Link to="/responsable" className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors">
-        <ArrowLeft className="w-4 h-4 mr-1" />
-        Back to Dashboard
-      </Link>
-
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{mockIncident.title}</h1>
-          <p className="text-gray-500">Incident #{id}</p>
+    <div className="page" style={{ maxWidth: 800, margin: '0 auto' }}>
+      <div className="incident-drawer" style={{ position: 'relative', width: '100%', height: 'auto', border: 'none', boxShadow: 'none' }}>
+        <div className="drawer-header" style={{ paddingLeft: 0, paddingRight: 0 }}>
+          <button className="drawer-back" onClick={() => navigate('/responsable')}>
+            <ArrowLeft size={17} />Mes incidents
+          </button>
         </div>
-        
-        <div className="flex flex-wrap gap-2">
-          {status === 'OPEN' && (
-            <>
-              <Button onClick={handleAssignToMe} variant="outline" className="flex items-center gap-2">
-                <UserPlus className="w-4 h-4" /> Assign to Me
-              </Button>
-              <Button onClick={handleMarkInProgress} className="flex items-center gap-2">
-                <Play className="w-4 h-4" /> Mark In Progress
-              </Button>
-            </>
-          )}
-          
-          {status === 'IN_PROGRESS' && (
-            <Button onClick={handleResolve} variant="primary" className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white">
-              <CheckCircle className="w-4 h-4" /> Resolve Incident
-            </Button>
-          )}
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="md:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-1">Description</h4>
-                <p className="text-gray-900 whitespace-pre-wrap">{mockIncident.description}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="text-sm font-medium text-gray-500 mb-1">Location</h4>
-                  <p className="text-gray-900">{mockIncident.location}</p>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium text-gray-500 mb-1">Reported By</h4>
-                  <p className="text-gray-900">{mockIncident.reportedBy}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="drawer-content" style={{ paddingLeft: 0, paddingRight: 0 }}>
+          <div className="drawer-kicker">
+            <span>{incident.id}</span><span>·</span><span>{formatDate(incident.createdAt)}</span>
+            <span className="drawer-kicker-spacer" />
+            <StatusBadge status={incident.status} />
+          </div>
 
-          {status === 'IN_PROGRESS' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Resolution Notes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
-                    Add Notes
-                  </label>
+          <div className="drawer-title-row">
+            <div className={`drawer-category category-${incident.priority.toLowerCase()}`}><Icon size={21} /></div>
+            <div>
+              <h2>{incident.title}</h2>
+              <div className="drawer-meta">
+                <PriorityBadge priority={incident.priority} />
+              </div>
+            </div>
+          </div>
+
+          <div className="drawer-location">
+            <MapPin size={15} /><span>{incident.site}</span><i />{incident.location}
+          </div>
+
+          {/* Primary action CTA */}
+          <div className="drawer-action-wrap">
+            {incident.status !== 'CLOSED' && actionLabel[incident.status] && CurrentActionIcon && (
+              <button className="button button-primary drawer-action">
+                <CurrentActionIcon size={16} />
+                {actionLabel[incident.status]}
+                <ChevronRight size={16} />
+              </button>
+            )}
+            {incident.status === 'NEW' && (
+              <button className="button button-primary drawer-action">
+                <UserPlus size={16} />Prendre en charge<ChevronRight size={16} />
+              </button>
+            )}
+            {incident.status === 'CLOSED' && (
+              <div className="closed-message"><CheckCircle2 size={17} />Dossier clôturé - lecture seule</div>
+            )}
+          </div>
+
+          {/* Incident description */}
+          <section className="drawer-section">
+            <h3>Signalement original</h3>
+            <p className="drawer-description">{incident.description}</p>
+            <div className="reporter-line">
+              <div className="avatar avatar-orange small-avatar">
+                {incident.reporter.split(' ').map((n) => n[0]).join('')}
+              </div>
+              <div><span>Signalé par</span><strong>{incident.reporter}</strong></div>
+              <time>{formatDate(incident.createdAt)} à {formatTime(incident.createdAt)}</time>
+            </div>
+          </section>
+
+          {/* Embedded Leaflet map - read-only */}
+          <section className="drawer-section">
+            <h3>Localisation</h3>
+            <div style={{ height: 200, borderRadius: 8, overflow: 'hidden', border: '1px solid #e4eaeb', zIndex: 0 }}>
+              <MapContainer
+                center={[incident.lat, incident.lng]}
+                zoom={16}
+                style={{ height: '100%', width: '100%', zIndex: 1 }}
+                zoomControl={false}
+                dragging={false}
+                scrollWheelZoom={false}
+              >
+                <TileLayer
+                  attribution="&copy; OpenStreetMap contributors"
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <Marker position={[incident.lat, incident.lng]}>
+                  <Popup>{incident.location}</Popup>
+                </Marker>
+              </MapContainer>
+            </div>
+          </section>
+
+          {/* Resolution notes - visible when in progress */}
+          {(incident.status === 'IN_PROGRESS' || incident.status === 'RESOLVED') && (
+            <section className="drawer-section">
+              <h3>Notes de résolution</h3>
+              {incident.resolutionText ? (
+                <p className="drawer-description">{incident.resolutionText}</p>
+              ) : (
+                <div className="comment-compose">
                   <textarea
-                    id="notes"
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Describe the actions taken to resolve..."
-                    value={resolutionNotes}
-                    onChange={(e) => setResolutionNotes(e.target.value)}
+                    placeholder="Décrivez les actions réalisées..."
+                    rows={3}
+                    style={{ display: 'block', width: '100%', border: 0, outline: 'none', resize: 'vertical', color: '#546b71', fontSize: 11, lineHeight: 1.5 }}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Attachments (Photos/Evidence)
-                  </label>
-                  <div className="flex gap-2">
-                    <Button variant="outline" type="button">
-                      <Upload className="w-4 h-4 mr-2" /> Upload File
-                    </Button>
-                    <Button variant="outline" type="button">
-                      <Camera className="w-4 h-4 mr-2" /> Take Photo
-                    </Button>
+              )}
+            </section>
+          )}
+
+          {/* Timeline */}
+          <section className="drawer-section">
+            <div className="section-title-line">
+              <h3>Chronologie</h3>
+              <span className="timeline-count">{incident.audit.length} événements</span>
+            </div>
+            <div className="timeline">
+              {incident.audit.map((event) => (
+                <div className="timeline-item" key={event.id}>
+                  <div className={`timeline-icon timeline-${event.kind}`}>
+                    <StatusIcon status={event.kind === 'created' ? 'NEW' : event.kind === 'closed' ? 'CLOSED' : event.kind === 'resolution' ? 'RESOLVED' : 'IN_PROGRESS'} />
+                  </div>
+                  <div>
+                    <strong>{event.label}</strong>
+                    <span>{event.actor} · {relativeTime(event.at)}</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+              ))}
+            </div>
+          </section>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-1">Current State</h4>
-                <Badge variant={status === 'RESOLVED' ? 'success' : status === 'IN_PROGRESS' ? 'warning' : 'error'}>
-                  {status.replace('_', ' ')}
-                </Badge>
+          {/* Comments */}
+          <section className="drawer-section comments-section">
+            <div className="section-title-line">
+              <h3>Commentaires</h3>
+              <span className="timeline-count">{incident.comments.length}</span>
+            </div>
+            {incident.comments.length > 0 && (
+              <div className="comment-list">
+                {incident.comments.map((item) => (
+                  <div className="comment" key={item.id}>
+                    <div className="avatar avatar-green small-avatar">
+                      {item.author.split(' ').map((n) => n[0]).join('')}
+                    </div>
+                    <div>
+                      <div className="comment-head">
+                        <strong>{item.author}</strong><time>{relativeTime(item.at)}</time>
+                      </div>
+                      <p>{item.body}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
+            )}
+            <div className="comment-compose">
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Ajouter une note d'intervention..."
+                rows={2}
+                style={{ display: 'block', width: '100%', border: 0, outline: 'none', resize: 'vertical', color: '#546b71', fontSize: 10, lineHeight: 1.5 }}
+              />
               <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-1">Severity</h4>
-                <Badge variant="warning">{mockIncident.severity}</Badge>
+                <button className="attach-button"><Paperclip size={15} />Joindre une photo</button>
+                <button
+                  className="send-button"
+                  disabled={!comment.trim()}
+                  onClick={() => { alert('Commentaire ajouté'); setComment(''); }}
+                >
+                  <Send size={15} />Publier
+                </button>
               </div>
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-1">Category</h4>
-                <p className="text-sm text-gray-900">{mockIncident.category}</p>
-              </div>
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-1">Date Reported</h4>
-                <p className="text-sm text-gray-900">{mockIncident.date}</p>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
         </div>
       </div>
     </div>

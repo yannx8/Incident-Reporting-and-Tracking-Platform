@@ -1,160 +1,139 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Search, ChevronLeft, ChevronRight, Eye, Plus } from 'lucide-react';
-import { Card, CardContent } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { Select } from '../components/ui/Select';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useIncidents } from '../api/incidents';
+import { sites, statusMeta, categoryIcons, relativeTime, priorityMeta } from '../lib/mockData';
+import { Plus, Search, SlidersHorizontal, ChevronRight, MapPin, ClipboardList } from 'lucide-react';
+import { Status, Priority } from '../types';
 
-// Mock data
-const mockIncidents = [
-  { id: '1', title: 'Server Rack Overheating', status: 'OPEN', severity: 'CRITICAL', category: 'Maintenance', date: '2026-09-08' },
-  { id: '2', title: 'Unauthorized Access Attempt', status: 'IN_PROGRESS', severity: 'HIGH', category: 'Security', date: '2026-09-07' },
-  { id: '3', title: 'Spill in Lobby', status: 'RESOLVED', severity: 'LOW', category: 'Safety', date: '2026-09-06' },
-  { id: '4', title: 'Broken Window', status: 'CLOSED', severity: 'MEDIUM', category: 'Maintenance', date: '2026-09-05' },
-  { id: '5', title: 'Network Outage', status: 'OPEN', severity: 'CRITICAL', category: 'General', date: '2026-09-08' },
-];
+function PriorityBadge({ priority }: { priority: Priority }) {
+  return <span className={`priority-badge ${priorityMeta[priority].className}`}><i />{priorityMeta[priority].label}</span>;
+}
+
+function StatusBadge({ status }: { status: Status }) {
+  return <span className={`status-badge ${statusMeta[status].className}`}><i />{statusMeta[status].label}</span>;
+}
+
+function IncidentTableRow({ incident, onClick }: { incident: import('../types').Incident, onClick: () => void }) {
+  const Icon = categoryIcons[incident.category];
+  return (
+    <button className="table-row w-full text-left" onClick={onClick}>
+      <div className="table-incident">
+        <div className={`table-category category-${incident.priority.toLowerCase()}`}><Icon size={16} /></div>
+        <div><strong>{incident.title}</strong><span>{incident.id} · {incident.category}</span></div>
+      </div>
+      <span className="table-site"><MapPin size={14} />{incident.site}</span>
+      <PriorityBadge priority={incident.priority} />
+      <StatusBadge status={incident.status} />
+      <span className="table-date">{relativeTime(incident.updatedAt)}</span>
+      <ChevronRight size={16} className="row-chevron" />
+    </button>
+  );
+}
 
 export function IncidentListPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [severityFilter, setSeverityFilter] = useState('');
+  const { data: incidents, isLoading } = useIncidents();
+  const navigate = useNavigate();
 
-  // Filtering mock data
-  const filtered = mockIncidents.filter(inc => {
-    if (statusFilter && inc.status !== statusFilter) return false;
-    if (severityFilter && inc.severity !== severityFilter) return false;
-    if (searchTerm && !inc.title.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-    return true;
-  });
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<'ALL' | Status>('ALL');
+  const [priority, setPriority] = useState<'ALL' | Priority>('ALL');
+  const [site, setSite] = useState('ALL');
+  const [page, setPage] = useState(1);
 
-  const getSeverityBadge = (severity: string) => {
-    switch (severity) {
-      case 'CRITICAL': return <Badge variant="error">Critical</Badge>;
-      case 'HIGH': return <Badge variant="warning">High</Badge>;
-      case 'MEDIUM': return <Badge variant="default">Medium</Badge>;
-      case 'LOW': return <Badge variant="success">Low</Badge>;
-      default: return <Badge>{severity}</Badge>;
-    }
-  };
+  const filtered = useMemo(() => {
+    if (!incidents) return [];
+    return incidents.filter((item) => 
+      (!query || `${item.title} ${item.description} ${item.id}`.toLowerCase().includes(query.toLowerCase())) && 
+      (status === 'ALL' || item.status === status) && 
+      (priority === 'ALL' || item.priority === priority) && 
+      (site === 'ALL' || item.siteId === site)
+    );
+  }, [incidents, query, status, priority, site]);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'OPEN': return <Badge variant="error">Open</Badge>;
-      case 'IN_PROGRESS': return <Badge variant="warning">In Progress</Badge>;
-      case 'RESOLVED': return <Badge variant="success">Resolved</Badge>;
-      case 'CLOSED': return <Badge variant="default">Closed</Badge>;
-      default: return <Badge>{status}</Badge>;
-    }
-  };
+  const pages = Math.max(1, Math.ceil(filtered.length / 6));
+  const shown = filtered.slice((page - 1) * 6, page * 6);
+
+  useEffect(() => setPage(1), [query, status, priority, site]);
+
+  if (isLoading || !incidents) return <div className="p-8">Chargement...</div>;
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+    <div className="page incidents-page">
+      <div className="page-heading">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Incidents</h1>
-          <p className="text-gray-500">Manage and track reported incidents.</p>
+          <div className="eyebrow"><span className="eyebrow-dot" />CENTRE OPÉRATIONNEL</div>
+          <h1>Incidents</h1>
+          <p>Suivez, qualifiez et coordonnez les interventions de votre organisation.</p>
         </div>
-        <Link to="/incidents/new">
-          <Button className="flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            Report Incident
-          </Button>
-        </Link>
+        <button className="button button-primary" onClick={() => navigate('/incidents/new')}>
+          <Plus size={17} />Nouveau signalement
+        </button>
       </div>
 
-      <Card className="mb-6">
-        <CardContent className="pt-6 flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-              <Input 
-                placeholder="Search incidents..." 
-                className="pl-9"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="w-full md:w-48">
-            <Select 
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              options={[
-                { value: '', label: 'All Statuses' },
-                { value: 'OPEN', label: 'Open' },
-                { value: 'IN_PROGRESS', label: 'In Progress' },
-                { value: 'RESOLVED', label: 'Resolved' },
-                { value: 'CLOSED', label: 'Closed' },
-              ]}
-            />
-          </div>
-          <div className="w-full md:w-48">
-            <Select 
-              value={severityFilter}
-              onChange={(e) => setSeverityFilter(e.target.value)}
-              options={[
-                { value: '', label: 'All Severities' },
-                { value: 'CRITICAL', label: 'Critical' },
-                { value: 'HIGH', label: 'High' },
-                { value: 'MEDIUM', label: 'Medium' },
-                { value: 'LOW', label: 'Low' },
-              ]}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="list-kpis">
+        <div><span>Tout</span><strong>{incidents.length}</strong></div>
+        <div><span>Actifs</span><strong>{incidents.filter((i) => i.status !== 'CLOSED').length}</strong></div>
+        <div><span>Critiques</span><strong className="text-critical">{incidents.filter((i) => i.priority === 'CRITICAL' && i.status !== 'CLOSED').length}</strong></div>
+        <div><span>À vérifier</span><strong className="text-purple">{incidents.filter((i) => i.status === 'RESOLVED').length}</strong></div>
+      </div>
 
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-gray-700 uppercase bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-4">Title</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Severity</th>
-                <th className="px-6 py-4">Category</th>
-                <th className="px-6 py-4">Date</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((inc) => (
-                <tr key={inc.id} className="bg-white border-b hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-gray-900">{inc.title}</td>
-                  <td className="px-6 py-4">{getStatusBadge(inc.status)}</td>
-                  <td className="px-6 py-4">{getSeverityBadge(inc.severity)}</td>
-                  <td className="px-6 py-4 text-gray-500">{inc.category}</td>
-                  <td className="px-6 py-4 text-gray-500">{inc.date}</td>
-                  <td className="px-6 py-4 text-right">
-                    <Link to={`/incidents/${inc.id}`}>
-                      <Button variant="outline" className="px-2 py-1 h-auto text-xs">
-                        <Eye className="w-4 h-4 mr-1 inline" /> View
-                      </Button>
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    No incidents found matching your criteria.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        
-        <div className="p-4 border-t flex items-center justify-between text-sm text-gray-500">
-          <div>Showing 1 to {filtered.length} of {filtered.length} results</div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="p-2 h-auto" disabled><ChevronLeft className="w-4 h-4" /></Button>
-            <Button variant="outline" className="p-2 h-auto" disabled><ChevronRight className="w-4 h-4" /></Button>
+      <section className="panel incidents-table-panel">
+        <div className="table-toolbar">
+          <div className="table-search">
+            <Search size={17} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher par titre, description ou identifiant…" />
+          </div>
+          <div className="toolbar-filters">
+            <select value={status} onChange={(e) => setStatus(e.target.value as 'ALL' | Status)}>
+              <option value="ALL">Tous les statuts</option>
+              {Object.entries(statusMeta).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
+            </select>
+            <select value={priority} onChange={(e) => setPriority(e.target.value as 'ALL' | Priority)}>
+              <option value="ALL">Toutes priorités</option>
+              {Object.entries(priorityMeta).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
+            </select>
+            <select value={site} onChange={(e) => setSite(e.target.value)}>
+              <option value="ALL">Tous les sites</option>
+              {sites.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <button className="filter-icon-button">
+              <SlidersHorizontal size={16} /><span>Filtres</span>
+            </button>
           </div>
         </div>
-      </Card>
+
+        <div className="table-head">
+          <span>Incident</span>
+          <span>Site</span>
+          <span>Priorité</span>
+          <span>Statut</span>
+          <span>Mis à jour</span>
+          <span />
+        </div>
+
+        {shown.map((incident) => (
+          <IncidentTableRow key={incident.id} incident={incident} onClick={() => navigate(`/incidents/${incident.id}`)} />
+        ))}
+
+        {shown.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-icon"><ClipboardList size={18} /></div>
+            <strong>Aucun incident trouvé</strong>
+            <span>Les éléments apparaîtront ici.</span>
+          </div>
+        )}
+
+        <div className="table-footer">
+          <span>Affichage de <b>{shown.length ? (page - 1) * 6 + 1 : 0}–{Math.min(page * 6, filtered.length)}</b> sur <b>{filtered.length}</b> incidents</span>
+          <div className="pagination">
+            <button disabled={page === 1} onClick={() => setPage((c) => c - 1)}><ChevronRight size={15} className="rotate-180" /></button>
+            {Array.from({ length: pages }, (_, index) => (
+              <button key={index} className={page === index + 1 ? 'current' : ''} onClick={() => setPage(index + 1)}>{index + 1}</button>
+            ))}
+            <button disabled={page === pages} onClick={() => setPage((c) => c + 1)}><ChevronRight size={15} /></button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

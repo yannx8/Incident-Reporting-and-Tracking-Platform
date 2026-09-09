@@ -1,15 +1,14 @@
-import React from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useIncident } from '../api/incidents';
+import { categoryIcons, priorityMeta, statusMeta, formatDate, formatTime, relativeTime } from '../lib/mockData';
+import { ArrowLeft, MoreHorizontal, MapPin, ChevronRight, CheckCircle2, Paperclip, Send, Activity, AlertTriangle, Check } from 'lucide-react';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { ChevronLeft, Clock, MapPin, AlertTriangle, FileText, CheckCircle2 } from 'lucide-react';
+import { Status, Priority } from '../types';
 
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
-
-// Fix leaflet icon issue in react
+// Fix leaflet default marker icon in bundled builds
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -17,158 +16,193 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Mock incident
-const mockIncident = {
-  id: '1',
-  title: 'Server Rack Overheating',
-  status: 'IN_PROGRESS',
-  severity: 'CRITICAL',
-  category: 'Maintenance',
-  description: 'The main server rack in Data Center A is showing temperatures exceeding 85°C. Cooling systems appear to be running but are ineffective. Immediate attention required to prevent hardware failure.',
-  reporter: 'John Doe',
-  date: '2026-09-08T10:30:00Z',
-  location: { lat: 51.505, lng: -0.09 },
-  timeline: [
-    { id: 't1', status: 'OPEN', timestamp: '2026-09-08T10:30:00Z', note: 'Incident reported by John Doe', author: 'System' },
-    { id: 't2', status: 'IN_PROGRESS', timestamp: '2026-09-08T10:45:00Z', note: 'Assigned to Maintenance Team Alpha', author: 'Jane Admin' },
-    { id: 't3', status: 'IN_PROGRESS', timestamp: '2026-09-08T11:15:00Z', note: 'Technician on site, assessing cooling unit', author: 'Tech Mike' },
-  ]
-};
+function StatusIcon({ status }: { status: Status }) {
+  if (status === 'CLOSED') return <Check size={14} />;
+  if (status === 'RESOLVED') return <CheckCircle2 size={14} />;
+  if (status === 'NEW') return <AlertTriangle size={14} />;
+  return <Activity size={14} />;
+}
+
+function PriorityBadge({ priority }: { priority: Priority }) {
+  return <span className={`priority-badge ${priorityMeta[priority].className}`}><i />{priorityMeta[priority].label}</span>;
+}
+
+function StatusBadge({ status }: { status: Status }) {
+  return <span className={`status-badge ${statusMeta[status].className}`}><i />{statusMeta[status].label}</span>;
+}
 
 export function IncidentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  // In a real app, fetch data based on ID. Using mock for now.
-  const incident = mockIncident;
+  const navigate = useNavigate();
+  const { data: incident, isLoading, error } = useIncident(id || '');
+  const [comment, setComment] = useState('');
 
-  const formatDate = (isoString: string) => {
-    return new Date(isoString).toLocaleString();
-  };
+  if (isLoading) return <div className="p-8">Chargement...</div>;
+  if (error || !incident) return <div className="p-8 text-red-500">Incident introuvable.</div>;
 
-  const getSeverityBadge = (severity: string) => {
-    switch (severity) {
-      case 'CRITICAL': return <Badge variant="error">Critical</Badge>;
-      case 'HIGH': return <Badge variant="warning">High</Badge>;
-      case 'MEDIUM': return <Badge variant="default">Medium</Badge>;
-      case 'LOW': return <Badge variant="success">Low</Badge>;
-      default: return <Badge>{severity}</Badge>;
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'OPEN': return <Badge variant="error">Open</Badge>;
-      case 'IN_PROGRESS': return <Badge variant="warning">In Progress</Badge>;
-      case 'RESOLVED': return <Badge variant="success">Resolved</Badge>;
-      case 'CLOSED': return <Badge variant="default">Closed</Badge>;
-      default: return <Badge>{status}</Badge>;
-    }
+  const Icon = categoryIcons[incident.category];
+  const actionLabel: Partial<Record<Status, string>> = {
+    NEW: 'Affecter un responsable',
+    ASSIGNED: "Accepter l'affectation",
+    IN_PROGRESS: 'Proposer la resolution',
+    RESOLVED: "Cloture l'incident",
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6">
-      <div className="mb-6">
-        <Link to="/incidents" className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 mb-4">
-          <ChevronLeft className="w-4 h-4 mr-1" /> Back to Incidents
-        </Link>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">{incident.title}</h1>
-            <div className="flex items-center gap-3 text-sm text-gray-500">
-              <span className="flex items-center"><Clock className="w-4 h-4 mr-1" /> Reported: {formatDate(incident.date)}</span>
-              <span className="flex items-center"><AlertTriangle className="w-4 h-4 mr-1" /> Category: {incident.category}</span>
+    <div className="page" style={{ maxWidth: 800, margin: '0 auto' }}>
+      <div className="incident-drawer" style={{ position: 'relative', width: '100%', height: 'auto', border: 'none', boxShadow: 'none' }}>
+        <div className="drawer-header" style={{ paddingLeft: 0, paddingRight: 0 }}>
+          <button className="drawer-back" onClick={() => navigate(-1)}>
+            <ArrowLeft size={17} />Retour
+          </button>
+        </div>
+        
+        <div className="drawer-content" style={{ paddingLeft: 0, paddingRight: 0 }}>
+          <div className="drawer-kicker">
+            <span>{incident.id}</span><span>·</span><span>{formatDate(incident.createdAt)}</span>
+            <span className="drawer-kicker-spacer" />
+            <button className="icon-button small"><MoreHorizontal size={17} /></button>
+          </div>
+          
+          <div className="drawer-title-row">
+            <div className={`drawer-category category-${incident.priority.toLowerCase()}`}><Icon size={21} /></div>
+            <div>
+              <h2>{incident.title}</h2>
+              <div className="drawer-meta">
+                <StatusBadge status={incident.status} />
+                <PriorityBadge priority={incident.priority} />
+              </div>
             </div>
           </div>
-          <div className="flex gap-2 items-center">
-            {getStatusBadge(incident.status)}
-            {getSeverityBadge(incident.severity)}
-            <Button>Update Status</Button>
+          
+          <div className="drawer-location">
+            <MapPin size={15} /><span>{incident.site}</span><i />{incident.location}
           </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center"><FileText className="w-5 h-5 mr-2 text-gray-500" /> Description</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-700 whitespace-pre-wrap">{incident.description}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center"><Clock className="w-5 h-5 mr-2 text-gray-500" /> Timeline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6 pl-4 border-l-2 border-gray-200 ml-2">
-                {incident.timeline.map((event, index) => (
-                  <div key={event.id} className="relative">
-                    <div className="absolute -left-[25px] bg-white p-1 rounded-full border-2 border-gray-200">
-                      <CheckCircle2 className="w-4 h-4 text-blue-500" />
+          {/* Read-only location map pinpointing the incident */}
+          <div className="mini-map" style={{ height: 180, borderRadius: 8, overflow: 'hidden', marginBottom: 16, zIndex: 0 }}>
+            <MapContainer
+              center={[incident.lat, incident.lng]}
+              zoom={16}
+              style={{ height: '100%', width: '100%', zIndex: 1 }}
+              dragging={false}
+              scrollWheelZoom={false}
+              doubleClickZoom={false}
+              zoomControl={false}
+            >
+              <TileLayer
+                attribution="&copy; OpenStreetMap contributors"
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <Marker position={[incident.lat, incident.lng]} />
+            </MapContainer>
+          </div>
+          
+          <div className="drawer-action-wrap">
+            {incident.status !== 'CLOSED' && (
+              <button className="button button-primary drawer-action">
+                {actionLabel[incident.status]}<ChevronRight size={16} />
+              </button>
+            )}
+            {incident.status === 'CLOSED' && (
+              <div className="closed-message"><CheckCircle2 size={17} />Dossier clôturé · lecture seule</div>
+            )}
+          </div>
+          
+          <section className="drawer-section">
+            <h3>Signalement original</h3>
+            <p className="drawer-description">{incident.description}</p>
+            <div className="reporter-line">
+              <div className="avatar avatar-orange small-avatar">
+                {incident.reporter.split(' ').map((name) => name[0]).join('')}
+              </div>
+              <div><span>Signalé par</span><strong>{incident.reporter}</strong></div>
+              <time>{formatDate(incident.createdAt)} à {formatTime(incident.createdAt)}</time>
+            </div>
+          </section>
+          
+          {incident.assignee && (
+            <section className="drawer-section assignment-section">
+              <div className="section-title-line">
+                <h3>Responsabilité</h3>
+                <span className="assignment-active"><i />Affectation active</span>
+              </div>
+              <div className="assignment-card">
+                <div className="avatar avatar-purple small-avatar">
+                  {incident.assignee.split(' ').map((name) => name[0]).join('')}
+                </div>
+                <div>
+                  <strong>{incident.assignee}</strong>
+                  <span>{incident.assignmentStatus === 'ACCEPTED' ? 'Intervention en cours' : 'En attente d’acceptation'}</span>
+                </div>
+                <ChevronRight size={16} />
+              </div>
+            </section>
+          )}
+          
+          <section className="drawer-section">
+            <div className="section-title-line">
+              <h3>Chronologie</h3>
+              <span className="timeline-count">{incident.audit.length} événements</span>
+            </div>
+            <div className="timeline">
+              {incident.audit.map((event) => (
+                <div className="timeline-item" key={event.id}>
+                  <div className={`timeline-icon timeline-${event.kind}`}>
+                    <StatusIcon status={event.kind === 'created' ? 'NEW' : event.kind === 'closed' ? 'CLOSED' : event.kind === 'resolution' ? 'RESOLVED' : 'IN_PROGRESS'} />
+                  </div>
+                  <div>
+                    <strong>{event.label}</strong>
+                    <span>{event.actor} · {relativeTime(event.at)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+          
+          <section className="drawer-section comments-section">
+            <div className="section-title-line">
+              <h3>Commentaires</h3>
+              <span className="timeline-count">{incident.comments.length}</span>
+            </div>
+            
+            {incident.comments.length > 0 && (
+              <div className="comment-list">
+                {incident.comments.map((item) => (
+                  <div className="comment" key={item.id}>
+                    <div className="avatar avatar-green small-avatar">
+                      {item.author.split(' ').map((name) => name[0]).join('')}
                     </div>
-                    <div className="ml-6 bg-gray-50 rounded-lg p-4 border border-gray-100">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="font-semibold text-sm">{event.note}</div>
-                        <span className="text-xs text-gray-500">{formatDate(event.timestamp)}</span>
+                    <div>
+                      <div className="comment-head">
+                        <strong>{item.author}</strong><time>{relativeTime(item.at)}</time>
                       </div>
-                      <div className="text-sm text-gray-600 flex items-center gap-2">
-                        <span>By: {event.author}</span>
-                        <span className="text-gray-300">|</span>
-                        <span>Status: {getStatusBadge(event.status)}</span>
-                      </div>
+                      <p>{item.body}</p>
                     </div>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center"><MapPin className="w-5 h-5 mr-2 text-gray-500" /> Location</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="h-64 w-full rounded-b-lg overflow-hidden relative z-0">
-                <MapContainer 
-                  center={[incident.location.lat, incident.location.lng]} 
-                  zoom={14} 
-                  style={{ height: '100%', width: '100%' }}
-                  zoomControl={false}
-                  dragging={false}
-                  scrollWheelZoom={false}
+            )}
+            
+            <div className="comment-compose">
+              <textarea 
+                value={comment} 
+                onChange={(e) => setComment(e.target.value)} 
+                placeholder="Ajouter un commentaire…" 
+                rows={2} 
+              />
+              <div>
+                <button className="attach-button"><Paperclip size={15} />Joindre</button>
+                <button 
+                  className="send-button" 
+                  disabled={!comment.trim()} 
+                  onClick={() => { alert('Add comment'); setComment(''); }}
                 >
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  <Marker position={[incident.location.lat, incident.location.lng]} />
-                </MapContainer>
+                  <Send size={15} />Publier
+                </button>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="space-y-4 text-sm">
-                <div className="grid grid-cols-3 border-b pb-2">
-                  <dt className="text-gray-500 font-medium">Incident ID</dt>
-                  <dd className="col-span-2 text-gray-900 font-mono">{incident.id}</dd>
-                </div>
-                <div className="grid grid-cols-3 border-b pb-2">
-                  <dt className="text-gray-500 font-medium">Reporter</dt>
-                  <dd className="col-span-2 text-gray-900">{incident.reporter}</dd>
-                </div>
-                <div className="grid grid-cols-3 border-b pb-2">
-                  <dt className="text-gray-500 font-medium">Category</dt>
-                  <dd className="col-span-2 text-gray-900">{incident.category}</dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
         </div>
       </div>
     </div>

@@ -1,104 +1,201 @@
 import React, { useState } from 'react';
-import { Menu, X, AlertTriangle, LayoutDashboard, Settings, User, LogOut } from 'lucide-react';
-import { Outlet, Link } from 'react-router-dom';
+import {
+  Menu, X, Settings, LayoutDashboard, ClipboardList, Map,
+  ChevronDown, Sparkles, Settings2, MoreHorizontal, ChevronRight,
+  Search, Bell, AlertTriangle, CheckCircle2, Activity,
+} from 'lucide-react';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 
 export interface CoreLayoutProps {
   children?: React.ReactNode;
 }
 
+// Notification data (in a real app this would come from an API hook)
+const DEMO_NOTIFICATIONS = [
+  { id: 'n1', type: 'critical', title: 'Nouvel incident critique', body: 'Fuite d\'eau - atelier mecanique', at: 'il y a 1 h', read: false, incidentId: 'INC-2408' },
+  { id: 'n2', type: 'info', title: 'Resolution a verifier', body: 'Banc exterieur descelle', at: 'il y a 3 h', read: false, incidentId: 'INC-2406' },
+  { id: 'n3', type: 'success', title: 'Intervention demarree', body: 'Eclairage defectueux - allee B', at: 'il y a 4 h', read: true, incidentId: 'INC-2409' },
+];
+
+function NotifIcon({ type }: { type: string }) {
+  if (type === 'critical') return <AlertTriangle size={14} />;
+  if (type === 'success') return <CheckCircle2 size={14} />;
+  return <Activity size={14} />;
+}
+
 export function CoreLayout({ children }: CoreLayoutProps = {}) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [notifsOpen, setNotifsOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const closeMobile = () => setMobileOpen(false);
+
+  const getPageTitle = (pathname: string) => {
+    if (pathname.startsWith('/incidents/new')) return 'Nouveau signalement';
+    if (pathname.startsWith('/incidents/')) return 'Details incident';
+    if (pathname.startsWith('/incidents')) return 'Incidents';
+    if (pathname.startsWith('/admin')) return 'Administration';
+    if (pathname.startsWith('/responsable')) return 'Responsable';
+    if (pathname.startsWith('/map')) return 'Carte';
+    return 'Vue ensemble';
+  };
+
+  const unreadCount = DEMO_NOTIFICATIONS.filter((n) => !n.read).length;
+
+  const isActive = (prefix: string) => location.pathname.startsWith(prefix);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      {/* Mobile sidebar backdrop */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 z-20 bg-gray-900/50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
+    <div className="app-shell">
+      {mobileOpen && <div className="mobile-overlay" onClick={closeMobile} />}
+      {notifsOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 29 }}
+          onClick={() => setNotifsOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <div 
-        className={`fixed inset-y-0 left-0 z-30 w-64 transform bg-white border-r border-gray-200 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
-      >
-        <div className="flex h-16 items-center justify-between px-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-6 w-6 text-blue-600" />
-            <span className="text-lg font-bold text-gray-900">IncidentTrack</span>
-          </div>
-          <button className="lg:hidden" onClick={() => setSidebarOpen(false)}>
-            <X className="h-5 w-5 text-gray-500" />
-          </button>
+      <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
+        <div className="brand">
+          <div className="brand-mark"><span /><span /><span /></div>
+          <div><strong>NEXUS</strong><small>INCIDENTS</small></div>
+          <button className="close-mobile" onClick={closeMobile}><X size={17} /></button>
         </div>
 
-        <nav className="p-4 space-y-1">
-          <Link to="/incidents" className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
-            <AlertTriangle className="h-5 w-5 text-gray-400" />
-            Incidents
-          </Link>
-          <Link to="/responsable" className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
-            <LayoutDashboard className="h-5 w-5 text-gray-400" />
-            Responsable
-          </Link>
-          <Link to="/admin" className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">
-            <Settings className="h-5 w-5 text-gray-400" />
-            Admin
-          </Link>
-        </nav>
-      </div>
+        <div className="org-switcher">
+          <div className="org-avatar">CH</div>
+          <div className="org-copy"><span>Organisation</span><strong>Campus Horizon</strong></div>
+          <ChevronDown size={15} />
+        </div>
 
-      {/* Main Content area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Top Header */}
-        <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-sm">
-          <button 
-            className="lg:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-md"
-            onClick={() => setSidebarOpen(true)}
+        <nav className="sidebar-nav">
+          <p className="nav-label">OPERATIONS</p>
+          <NavLink
+            to="/incidents"
+            className={() => `nav-item ${isActive('/incidents') ? 'nav-active' : ''}`}
+            onClick={closeMobile}
           >
-            <Menu className="h-6 w-6" />
-          </button>
+            <ClipboardList size={18} strokeWidth={isActive('/incidents') ? 2.3 : 1.8} />
+            <span>Incidents</span>
+          </NavLink>
+          <NavLink
+            to="/map"
+            className={() => `nav-item ${isActive('/map') ? 'nav-active' : ''}`}
+            onClick={closeMobile}
+          >
+            <Map size={18} strokeWidth={isActive('/map') ? 2.3 : 1.8} />
+            <span>Carte</span>
+          </NavLink>
+          <NavLink
+            to="/responsable"
+            className={() => `nav-item ${isActive('/responsable') ? 'nav-active' : ''}`}
+            onClick={closeMobile}
+          >
+            <LayoutDashboard size={18} strokeWidth={isActive('/responsable') ? 2.3 : 1.8} />
+            <span>Responsable</span>
+          </NavLink>
 
-          <div className="flex flex-1 justify-end px-4">
-            <div className="relative">
-              <button 
-                className="flex items-center gap-2 rounded-full border border-gray-200 bg-white p-1 pr-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onClick={() => setProfileOpen(!profileOpen)}
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-                  <User className="h-5 w-5" />
-                </div>
-                <span className="text-sm font-medium text-gray-700">Profile</span>
+          <p className="nav-label nav-label-spaced">ADMINISTRATION</p>
+          <NavLink
+            to="/admin"
+            className={() => `nav-item ${isActive('/admin') ? 'nav-active' : ''}`}
+            onClick={closeMobile}
+          >
+            <Settings size={18} strokeWidth={isActive('/admin') ? 2.3 : 1.8} />
+            <span>Admin</span>
+          </NavLink>
+        </nav>
+
+        <div className="sidebar-bottom">
+          <div className="sidebar-tip">
+            <Sparkles size={16} />
+            <div>
+              <strong>Tout est sous controle</strong>
+              <span>93% des incidents dans les delais.</span>
+            </div>
+          </div>
+          <button className="nav-item">
+            <Settings2 size={18} strokeWidth={1.8} />
+            <span>Parametres</span>
+          </button>
+          <div className="user-mini">
+            <div className="avatar avatar-green">SL</div>
+            <div><strong>Sonia Leroy</strong><span>Administrator</span></div>
+            <MoreHorizontal size={17} />
+          </div>
+        </div>
+      </aside>
+
+      {/* Content shell */}
+      <div className="content-shell">
+        <header className="topbar">
+          <button className="mobile-menu" onClick={() => setMobileOpen(true)}>
+            <Menu size={21} />
+          </button>
+          <div className="breadcrumbs">
+            <span>Workspace</span><ChevronRight size={14} />
+            <strong>{getPageTitle(location.pathname)}</strong>
+          </div>
+          <div className="top-actions">
+            <div className="top-search">
+              <Search size={17} />
+              <input placeholder="Rechercher..." />
+              <kbd>Ctrl K</kbd>
+            </div>
+
+            {/* Notification bell */}
+            <div style={{ position: 'relative' }}>
+              <button className="icon-button notification-trigger" onClick={() => setNotifsOpen((v) => !v)}>
+                <Bell size={19} />
+                {unreadCount > 0 && <i>{unreadCount}</i>}
               </button>
 
-              {/* Profile Dropdown */}
-              {profileOpen && (
-                <div className="absolute right-0 mt-2 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black/5 z-50">
-                  <div className="px-4 py-2 border-b border-gray-100">
-                    <p className="text-sm font-medium text-gray-900">Jane Doe</p>
-                    <p className="text-xs text-gray-500">jane@example.com</p>
+              {notifsOpen && (
+                <div className="notifications-panel">
+                  <div className="notifications-header">
+                    <div>
+                      <strong>Notifications</strong>
+                      <span>{unreadCount} non lue{unreadCount !== 1 ? 's' : ''}</span>
+                    </div>
+                    <button onClick={() => setNotifsOpen(false)}>Tout marquer lu</button>
                   </div>
-                  <a href="#" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                    <User className="mr-2 h-4 w-4" />
-                    My Profile
-                  </a>
-                  <a href="#" className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Log out
-                  </a>
+                  {DEMO_NOTIFICATIONS.map((n) => (
+                    <button
+                      key={n.id}
+                      className={`notification-row ${n.read ? 'notification-read' : ''}`}
+                      onClick={() => {
+                        setNotifsOpen(false);
+                        if (n.incidentId) navigate(`/incidents/${n.incidentId}`);
+                      }}
+                    >
+                      <div className={`notification-icon notif-${n.type}`}><NotifIcon type={n.type} /></div>
+                      <div>
+                        <strong>{n.title}</strong>
+                        <span>{n.body}</span>
+                        <time>{n.at}</time>
+                      </div>
+                      {!n.read && <span className="unread-dot" />}
+                    </button>
+                  ))}
+                  <button className="notifications-footer" onClick={() => setNotifsOpen(false)}>
+                    <Bell size={14} />Voir toutes les notifications
+                  </button>
                 </div>
               )}
             </div>
+
+            <div className="top-divider" />
+            <button className="profile-button">
+              <div className="avatar avatar-orange">SL</div>
+              <span>Sonia</span>
+              <ChevronDown size={14} />
+            </button>
           </div>
         </header>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
-          <div className="mx-auto max-w-7xl">
-            {children || <Outlet />}
-          </div>
+        <main className="main-content">
+          {children || <Outlet />}
         </main>
       </div>
     </div>
