@@ -1,59 +1,66 @@
-import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { CoreLayout } from './layouts/CoreLayout';
-import { AuthLayout } from './layouts/AuthLayout';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
-import { VerifyPage } from './pages/VerifyPage';
-import { IncidentListPage } from './pages/IncidentListPage';
-import { NewIncidentPage } from './pages/NewIncidentPage';
-import { IncidentDetailPage } from './pages/IncidentDetailPage';
-import { ResponsableDashboard } from './pages/ResponsableDashboard';
-import { AuthProvider, useAuth } from './lib/AuthContext';
+import { useEffect } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { useAuthStore } from './store/authStore';
+import { Spinner } from './components/shared/Spinner';
+import { LoginPage, RegisterPage, VerifyPage } from './components/auth';
+import { AppShell } from './components/layout';
+import { Dashboard } from './components/dashboard';
+import { Incidents } from './components/incidents';
+import { Team } from './components/team';
+import { Sites } from './components/sites';
+import { MapPage } from './components/map';
+import { ProfilePage } from './components/profile/ProfilePage';
+import { SettingsPage } from './components/settings/SettingsPage';
 
-const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
-const MapPage = React.lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
-const ResponsableIncidentPage = React.lazy(() => import('./pages/ResponsableIncidentPage').then(m => ({ default: m.ResponsableIncidentPage })));
-
-function ProtectedRoute() {
-  const { token } = useAuth();
-  if (!token) return <Navigate to="/login" replace />;
-  return <Outlet />;
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  if (!user?.roles.includes('ADMINISTRATOR')) return <Navigate to="/" />;
+  return <>{children}</>;
 }
 
-function App(): React.JSX.Element {
+function OperationalRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  if (!user?.roles.includes('ADMINISTRATOR') && !user?.roles.includes('RESPONSABLE')) return <Navigate to="/" />;
+  return <>{children}</>;
+}
+
+export default function App() {
+  const { user, isInitialized } = useAuthStore();
+
+  if (!isInitialized) {
+    return (
+      <div className="auth-shell">
+        <Spinner size={32} />
+      </div>
+    );
+  }
+
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Suspense fallback={<div className="flex h-screen w-full items-center justify-center">Loading...</div>}>
-          <Routes>
-            <Route element={<AuthLayout />}>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/verify" element={<VerifyPage />} />
-            </Route>
-            
-            <Route element={<ProtectedRoute />}>
-              <Route element={<CoreLayout />}>
-                <Route path="/" element={<Navigate to="/incidents" replace />} />
-                <Route path="/incidents" element={<IncidentListPage />} />
-                <Route path="/incidents/new" element={<NewIncidentPage />} />
-                <Route path="/incidents/:id" element={<IncidentDetailPage />} />
-                
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/map" element={<MapPage />} />
-                
-                <Route path="/responsable" element={<ResponsableDashboard />} />
-                <Route path="/responsable/incidents/:id" element={<ResponsableIncidentPage />} />
-              </Route>
-            </Route>
-            
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-    </AuthProvider>
+    <Routes>
+      <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
+      <Route path="/register" element={user ? <Navigate to="/" /> : <RegisterPage />} />
+      <Route path="/verify" element={<VerifyPage />} />
+      <Route
+        path="/*"
+        element={
+          user ? (
+            <AppShell>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/incidents" element={<Incidents />} />
+                <Route path="/map" element={<OperationalRoute><MapPage /></OperationalRoute>} />
+                <Route path="/team" element={<AdminRoute><Team /></AdminRoute>} />
+                <Route path="/sites" element={<AdminRoute><Sites /></AdminRoute>} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </AppShell>
+          ) : (
+            <Navigate to="/login" />
+          )
+        }
+      />
+    </Routes>
   );
 }
-
-export default App;

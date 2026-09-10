@@ -1,15 +1,25 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import App from './App.js';
-import './mvp-styles.css';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App';
+import 'leaflet/dist/leaflet.css';
+import './index.css';
+import { useAuth } from './store/authStore';
 
-const queryClient = new QueryClient();
+function Root() {
+  const load = useAuth((s) => s.restoreSession);
+  React.useEffect(() => {
+    load();
+  }, [load]);
+  return (
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  );
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </React.StrictMode>,
+    <Root />
+  </React.StrictMode>
 );

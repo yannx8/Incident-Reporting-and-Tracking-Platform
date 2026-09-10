@@ -1,58 +1,46 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { env } from '../env.js';
+import { prisma } from '../lib/prisma.js';
+import { AppError } from '../lib/errors.js';
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      user?: {
-        id: string;
+      auth?: {
+        userId: string;
+        organizationId: string;
+        roles: any[];
+        sessionId: string;
       };
     }
   }
 }
 
-export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+export async function authenticate(req: Request, _res: Response, next: NextFunction) {
   try {
-    let token = req.cookies?.token;
-    
-    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    if (!token) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      console.error('JWT_SECRET is not set in environment variables');
-      return res.status(500).json({ error: 'Internal server error' });
-    }
-    
-    const decoded = jwt.verify(token, secret) as { userId: string };
-    
-    if (!decoded || !decoded.userId) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId }
+    const h = req.headers.authorization;
+    if (!h?.startsWith('Bearer ')) throw new AppError('AUTH_REQUIRED', 401, 'Authentication required');
+    const p = jwt.verify(h.slice(7), env.JWT_SECRET) as { userId: string; organizationId: string; sessionId: string };
+    const session = await prisma.session.findFirst({
+      where: {
+        id: p.sessionId,
+        userId: p.userId,
+        organizationId: p.organizationId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() }
+      },
+      include: { user: true }
     });
-
-    if (!user) {
-      return res.status(401).json({ error: 'User no longer exists' });
-    }
-
-    req.user = {
-      id: user.id
-    };
-
+    if (!session) throw new AppError('AUTH_INVALID', 401, 'Session expired or revoked');
+    const m = await prisma.organizationMembership.findUnique({
+      where: { organizationId_userId: { organizationId: p.organizationId, userId: p.userId } }
+    });
+    if (!m || m.status !== 'ACTIVE') throw new AppError('AUTH_INVALID', 401, 'Membership inactive');
+    req.auth = { userId: p.userId, organizationId: p.organizationId, roles: m.roles, sessionId: session.id };
+    await prisma.session.update({ where: { id: session.id }, data: { lastUsedAt: new Date() } });
     next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+  } catch (e) {
+    next(e);
   }
-};
+}
