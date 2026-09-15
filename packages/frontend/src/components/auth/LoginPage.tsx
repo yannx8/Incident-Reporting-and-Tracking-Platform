@@ -19,6 +19,8 @@ export function LoginPage() {
     e.preventDefault();
     try {
       await login(email, password, rememberMe);
+      // Read user directly from the store after login to confirm auth succeeded
+      // before navigating, avoiding a flash of unauthenticated state.
       if (useAuthStore.getState().user) navigate('/');
     } catch {}
   };

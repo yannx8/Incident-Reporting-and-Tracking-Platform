@@ -1,6 +1,11 @@
 import { PriorityBadge } from '../shared/PriorityBadge';
 
+/**
+ * Horizontal bar chart showing incident counts per priority level.
+ * Uses a fixed color map for visual consistency across the dashboard.
+ */
 export function PriorityDistribution({ data }: { data: any[] }) {
+  // Default to 1 to avoid division by zero when dataset is empty.
   const total = data.reduce((s: number, x: any) => s + x._count, 0) || 1;
   const colorMap: Record<string, string> = {
     CRITICAL: '#d97070',

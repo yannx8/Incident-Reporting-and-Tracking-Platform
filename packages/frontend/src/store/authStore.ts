@@ -1,27 +1,26 @@
 import { create } from 'zustand';
 import { AuthUser } from '../types';
-import { apiLogin, apiRegister, apiVerify, apiGetMe, bootstrap, setAccessToken } from '../api/client';
+import { apiLogin, apiRegister, apiGetMe, bootstrap, setAccessToken } from '../api/client';
 
 export interface AuthState {
   user: AuthUser | null;
   isLoading: boolean;
   isInitialized: boolean;
   error: string | null;
-  pendingVerification: { code: string } | null;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (name: string, email: string, password: string, orgSlug?: string) => Promise<void>;
-  verify: (code: string) => Promise<void>;
   logout: () => Promise<void>;
   restoreSession: () => Promise<void>;
   clearError: () => void;
 }
 
+// Single source of truth for auth state; avoids prop-drilling through
+// the component tree and keeps login/logout logic co-located
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: false,
   isInitialized: false,
   error: null,
-  pendingVerification: null,
 
   login: async (email: string, password: string, rememberMe = false) => {
     set({ isLoading: true, error: null });
@@ -37,31 +36,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   register: async (name: string, email: string, password: string, orgSlug?: string) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await apiRegister(name, email, password, orgSlug);
-      set({
-        pendingVerification: { code: res.verificationCode || '' },
-        isLoading: false,
-        error: null
-      });
+      await apiRegister(name, email, password, orgSlug);
+      const user = await apiGetMe();
+      set({ user, isLoading: false, error: null });
     } catch (err: any) {
       set({ error: err.message || "Erreur lors de l'inscription", isLoading: false });
-      throw err;
-    }
-  },
-
-  verify: async (code: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      await apiVerify(code);
-      const user = await apiGetMe();
-      set({
-        user,
-        pendingVerification: null,
-        isLoading: false,
-        error: null
-      });
-    } catch (err: any) {
-      set({ error: err.message || 'Code de vérification invalide', isLoading: false });
       throw err;
     }
   },
@@ -71,7 +50,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     } catch {}
     setAccessToken(null);
-    set({ user: null, pendingVerification: null, error: null });
+    set({ user: null, error: null });
   },
 
   restoreSession: async () => {

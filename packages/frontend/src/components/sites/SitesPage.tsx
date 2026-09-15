@@ -78,6 +78,7 @@ export function Sites() {
           ) : (
             data.map((s, i) => (
               <div key={s.id} className={`panel site-card${!s.isActive ? ' inactive' : ''}`}>
+                {/* Cycle through predefined colors for visual differentiation */}
                 <div className="site-card-dot" style={{ background: siteColors[i % siteColors.length] }} />
                 {!s.isActive && <span className="site-card-inactive">{t('sites.inactive')}</span>}
                 <div className="site-card-name">{s.name}</div>
@@ -152,6 +153,14 @@ function SiteModal({ mode, site, onClose, onSaved }: SiteModalProps) {
   const [apiErr, setApiErr] = useState('');
   const t = useI18n((s) => s.t);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const validate = () => {
     const e: Record<string, string> = {};
     if (name.length < 2 || name.length > 100) e.name = t('sites.nameError');
@@ -187,55 +196,57 @@ function SiteModal({ mode, site, onClose, onSaved }: SiteModalProps) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="create-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
+      <div className="create-modal site-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="site-modal-title">
         <div className="modal-header">
           <div>
-            <h2>{mode === 'create' ? t('sites.add') : t('sites.edit')}</h2>
+            <h2 id="site-modal-title">{mode === 'create' ? t('sites.add') : t('sites.edit')}</h2>
             <div className="modal-subtitle">
               {mode === 'create' ? t('sites.createSubtitle') : t('sites.editSubtitle')}
             </div>
           </div>
-          <button className="icon-button" onClick={onClose}><X size={18} /></button>
+          <button className="icon-button" onClick={onClose} aria-label={t('common.close')}><X size={18} /></button>
         </div>
 
-        <div className="form-grid" style={{ padding: '20px 24px' }}>
-          <div className="form-field span-full">
-            <label>{t('sites.name')} <em>*</em></label>
-            <input
-              maxLength={100}
-              placeholder={t('sites.namePlaceholder')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            {errors.name && <div className="form-error">{errors.name}</div>}
+        <div className="modal-body">
+          <div className="form-grid">
+            <div className="form-field span-full">
+              <label>{t('sites.name')} <em>*</em></label>
+              <input
+                maxLength={100}
+                placeholder={t('sites.namePlaceholder')}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              {errors.name && <div className="form-error">{errors.name}</div>}
+            </div>
+
+            <div className="form-field span-full">
+              <label>{t('sites.address')} <span style={{ color: '#94a3b8', fontWeight: 400 }}>{t('sites.addressOptional')}</span></label>
+              <input
+                placeholder={t('sites.addressPlaceholder')}
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </div>
+
+            <div className="form-field span-full">
+              <label>{t('sites.location')} <em>*</em></label>
+              <MapLocationPicker
+                value={location}
+                onChange={(loc) => {
+                  setLocation(loc);
+                  setErrors((prev) => { const n = { ...prev }; delete n.location; return n; });
+                  if (loc.address && !address) setAddress(loc.address);
+                }}
+                height={240}
+                draggable
+              />
+              {errors.location && <div className="form-error">{errors.location}</div>}
+            </div>
           </div>
 
-          <div className="form-field span-full">
-            <label>{t('sites.address')} <span style={{ color: '#a2aeb0', fontWeight: 400 }}>{t('sites.addressOptional')}</span></label>
-            <input
-              placeholder={t('sites.addressPlaceholder')}
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </div>
-
-          <div className="form-field span-full">
-            <label>{t('sites.location')} <em>*</em></label>
-            <MapLocationPicker
-              value={location}
-              onChange={(loc) => {
-                setLocation(loc);
-                setErrors((prev) => { const n = { ...prev }; delete n.location; return n; });
-                if (loc.address && !address) setAddress(loc.address);
-              }}
-              height={280}
-              draggable
-            />
-            {errors.location && <div className="form-error">{errors.location}</div>}
-          </div>
+          {apiErr && <div className="auth-error" style={{ margin: '8px 0 0' }}>{apiErr}</div>}
         </div>
-
-        {apiErr && <div className="auth-error" style={{ margin: '0 24px 8px' }}>{apiErr}</div>}
 
         <div className="form-footer">
           <button className="button button-ghost" onClick={onClose}>{t('common.cancel')}</button>

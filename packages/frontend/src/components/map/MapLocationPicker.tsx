@@ -2,15 +2,16 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import { Search, Crosshair, MapPin, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { searchLocations, reverseGeocode, debounce, GeocodingResult } from '../../lib/geocoding';
+import { useI18n } from '../../i18n';
 import { Spinner } from '../shared/Spinner';
 
-const DEFAULT_CENTER: [number, number] = [4.052, 9.768];
+const DEFAULT_CENTER: [number, number] = [4.052, 9.768]; // Douala, Cameroon
 const DEFAULT_ZOOM = 13;
 
 function createSiteIcon(): L.DivIcon {
   return L.divIcon({
     className: '',
-    html: `<div style="width:32px;height:32px;border-radius:50%;background:#286c61;box-shadow:0 3px 10px rgba(0,0,0,.3);display:grid;place-items:center;border:3px solid white">
+    html: `<div style="width:32px;height:32px;border-radius:50%;background:#2563eb;box-shadow:0 3px 10px rgba(0,0,0,.3);display:grid;place-items:center;border:3px solid white">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
       </svg>
@@ -38,6 +39,11 @@ interface MapLocationPickerProps {
   defaultZoom?: number;
 }
 
+/**
+ * Interactive map picker with search, geolocation, and reverse geocoding.
+ * Uses raw Leaflet (not react-leaflet) to avoid SSR hydration issues and to
+ * have fine-grained control over marker drag events and map cleanup.
+ */
 export function MapLocationPicker({
   value,
   onChange,
@@ -51,6 +57,8 @@ export function MapLocationPicker({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const t = useI18n((s) => s.t);
+  const locale = useI18n((s) => s.locale);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<GeocodingResult[]>([]);
@@ -61,11 +69,12 @@ export function MapLocationPicker({
   const [addressExpanded, setAddressExpanded] = useState(false);
   const [resolvedAddress, setResolvedAddress] = useState('');
 
+  /* Debounced geocoding search to avoid hammering the Nominatim API on every keystroke. */
   const debouncedSearch = useRef(
     debounce(async (q: string) => {
       if (!q.trim()) { setSearchResults([]); setSearching(false); return; }
       setSearching(true);
-      const results = await searchLocations(q);
+      const results = await searchLocations(q, locale);
       setSearchResults(results);
       setSearching(false);
     }, 400)
@@ -105,6 +114,12 @@ export function MapLocationPicker({
 
     mapRef.current = map;
 
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        map.invalidateSize();
+      });
+    });
+
     return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
   }, []);
 
@@ -140,17 +155,17 @@ export function MapLocationPicker({
       }
     }
 
-    map.setView([lat, lng], Math.max(map.getZoom(), 15));
+    map.setView([lat, lng], Math.max(map.getZoom(), 15)); // Zoom in at least to 15 to ensure marker visibility
   }, [draggable, onChange]);
 
   const reverseResolve = useCallback(async (lat: number, lng: number) => {
-    const result = await reverseGeocode(lat, lng);
+    const result = await reverseGeocode(lat, lng, locale);
     if (result) {
       setResolvedAddress(result.displayName);
     } else {
       setResolvedAddress('');
     }
-  }, []);
+  }, [locale]);
 
   const handleSearchSelect = (result: GeocodingResult) => {
     updateMarker(result.latitude, result.longitude);
@@ -163,7 +178,7 @@ export function MapLocationPicker({
 
   const handleCurrentLocation = () => {
     if (!navigator.geolocation) {
-      setGeoError('La géolocalisation n\'est pas supportée par votre navigateur.');
+      setGeoError(t('mapPicker.notSupported'));
       return;
     }
 
@@ -181,11 +196,11 @@ export function MapLocationPicker({
       (err) => {
         setGeoLoading(false);
         if (err.code === 1) {
-          setGeoError('Accès à la localisation refusé. Vous pouvez rechercher ou cliquer sur la carte.');
+          setGeoError(t('mapPicker.geoDenied'));
         } else if (err.code === 2) {
-          setGeoError('Position indisponible. Essayez de cliquer sur la carte.');
+          setGeoError(t('mapPicker.geoUnavailable'));
         } else {
-          setGeoError('Délai d\'attente dépassé. Essayez de cliquer sur la carte.');
+          setGeoError(t('mapPicker.geoTimeout'));
         }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
@@ -199,7 +214,7 @@ export function MapLocationPicker({
           <div className="mlp-search-input">
             <Search size={15} />
             <input
-              placeholder="Rechercher une adresse ou un lieu..."
+              placeholder={t('mapPicker.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -221,7 +236,7 @@ export function MapLocationPicker({
             </div>
           )}
           {searchOpen && searchQuery.length >= 2 && !searching && searchResults.length === 0 && (
-            <div className="mlp-search-empty">Aucun résultat. Essayez une autre recherche.</div>
+            <div className="mlp-search-empty">{t('mapPicker.noResults')}</div>
           )}
         </div>
       )}
@@ -230,7 +245,7 @@ export function MapLocationPicker({
         {showCurrentLocation && (
           <button type="button" className="mlp-tool-btn" onClick={handleCurrentLocation} disabled={geoLoading}>
             {geoLoading ? <Spinner size={12} /> : <Crosshair size={13} />}
-            <span>Ma position</span>
+            <span>{t('map.myLocation')}</span>
           </button>
         )}
         {value && (
@@ -253,24 +268,24 @@ export function MapLocationPicker({
         <div className="mlp-location-info">
           <div className="mlp-location-check">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-            <span>Emplacement sélectionné</span>
+            <span>{t('mapPicker.locationSelected')}</span>
           </div>
           {resolvedAddress && <div className="mlp-location-address">{resolvedAddress}</div>}
-          {!resolvedAddress && <div className="mlp-location-coords">Coordonnées disponibles — Adresse non déterminée</div>}
+          {!resolvedAddress && <div className="mlp-location-coords">{t('mapPicker.locationUnavailable')}</div>}
           <button type="button" className="mlp-expand-btn" onClick={() => setAddressExpanded(!addressExpanded)}>
-            Détails de localisation avancés {addressExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {t('mapPicker.advancedDetails')} {addressExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </button>
           {addressExpanded && (
             <div className="mlp-details">
               <div className="mlp-detail-row">
-                <span>Latitude</span><span>{value.latitude.toFixed(6)}</span>
+                <span>{t('mapPicker.latitude')}</span><span>{value.latitude.toFixed(6)}</span>
               </div>
               <div className="mlp-detail-row">
-                <span>Longitude</span><span>{value.longitude.toFixed(6)}</span>
+                <span>{t('mapPicker.longitude')}</span><span>{value.longitude.toFixed(6)}</span>
               </div>
               {resolvedAddress && (
                 <div className="mlp-detail-row">
-                  <span>Adresse</span><span>{resolvedAddress}</span>
+                  <span>{t('mapPicker.address')}</span><span>{resolvedAddress}</span>
                 </div>
               )}
             </div>
@@ -281,7 +296,7 @@ export function MapLocationPicker({
       {!value && (
         <div className="mlp-placeholder">
           <MapPin size={16} />
-          <span>Cliquez sur la carte, recherchez une adresse ou utilisez votre position</span>
+          <span>{t('mapPicker.placeholder')}</span>
         </div>
       )}
     </div>

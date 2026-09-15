@@ -1,15 +1,18 @@
 const fr = {
   nav: {
+    overview: 'Vue d\'ensemble',
     dashboard: 'Vue d\'ensemble',
     incidents: 'Incidents',
     map: 'Carte opérationnelle',
     team: 'Équipe',
+    teams: 'Équipes',
     sites: 'Sites',
     profile: 'Profil',
     settings: 'Paramètres',
     logout: 'Déconnexion',
     navigation: 'NAVIGATION',
-    administration: 'ADMINISTRATION'
+    administration: 'ADMINISTRATION',
+    workspace: 'Opérations'
   },
   dashboard: {
     eyebrow: 'VUE D\'ENSEMBLE',
@@ -21,6 +24,7 @@ const fr = {
     },
     userSubtitle: 'Gérez vos signalements d\'incidents',
     adminSubtitle: 'Voici ce qui nécessite votre attention',
+    allSystemsOperational: 'Tous les systèmes sont opérationnels',
     reportIncident: 'Signaler un incident',
     newIncident: 'Nouvel incident',
     kpi: {
@@ -34,6 +38,10 @@ const fr = {
       resolvedRate: 'Taux de résolution',
       activeIncidents: 'Incidents actifs',
       activeSub: 'Total des incidents',
+      critical: 'Critiques',
+      criticalSub: 'Nécessitent une attention immédiate',
+      toReview: 'À vérifier',
+      toReviewSub: 'Résolutions en attente',
       myAssignments: 'Mes assignations',
       totalAssigned: 'Total affecté',
       toAccept: 'À accepter',
@@ -59,6 +67,10 @@ const fr = {
       recentActivitySub: 'Dernières mises à jour',
       priorities: 'Priorités',
       prioritiesSub: 'Répartition par niveau',
+      categories: 'Catégories',
+      categoriesSub: 'Répartition par type',
+      trend: 'Tendance',
+      trendSub: 'Incidents des 7 derniers jours',
       mesIncidents: 'Mes incidents',
       assigned: 'Assigné',
       submitted: 'Soumis'
@@ -90,6 +102,8 @@ const fr = {
     search: 'Rechercher un incident...',
     filterStatus: 'Tous les statuts',
     filterPriority: 'Toutes priorités',
+    filterCategory: 'Toutes catégories',
+    filterSite: 'Tous les sites',
     empty: 'Aucun incident trouvé',
     emptyFiltered: 'Modifiez vos filtres pour trouver des incidents',
     emptyCreate: 'Commencez par signaler votre premier incident',
@@ -214,7 +228,10 @@ const fr = {
     awaitingAcceptance: 'À accepter',
     inProgressStatus: 'En cours',
     resolved: 'À vérifier',
-    closed: 'Clôturé'
+    closed: 'Clôturé',
+    satelliteView: 'Vue satellite',
+    streetView: 'Vue rue',
+    myLocation: 'Ma position'
   },
   sites: {
     title: 'Sites',
@@ -252,7 +269,35 @@ const fr = {
     subtitle: 'Gestion des responsables',
     members: 'responsable(s)',
     organization: 'dans votre organisation',
-    empty: 'Aucun responsable enregistré'
+    empty: 'Aucun responsable enregistré',
+    emptyDesc: 'Ajoutez votre premier responsable pour commencer à assigner des incidents',
+    add: 'Ajouter un responsable',
+    edit: 'Modifier le responsable',
+    deactivate: 'Désactiver',
+    reactivate: 'Réactiver',
+    deactivateSuccess: 'Responsable désactivé',
+    reactivateSuccess: 'Responsable réactivé',
+    deactivateTitle: 'Désactiver le responsable',
+    deactivateMessage: 'Ce responsable ne recevra plus de nouvelles assignations. Désactiver',
+    createSubtitle: 'Promouvoir un membre existant en responsable',
+    editSubtitle: 'Mettre à jour les spécialités, sites et disponibilité',
+    member: 'Membre',
+    memberPlaceholder: 'Sélectionnez un membre à promouvoir...',
+    searchMember: 'Rechercher par nom ou email...',
+    noCandidates: 'Aucun membre disponible à promouvoir',
+    selectMember: 'Veuillez sélectionner un membre',
+    specialties: 'Spécialités',
+    noSpecialties: 'Aucune spécialité. Créez-en une ci-dessous.',
+    newSpecialty: 'Nom de la nouvelle spécialité...',
+    addSpecialty: 'Créer',
+    sites: 'Sites assignés',
+    noSites: 'Aucun site assigné',
+    status: 'Disponibilité',
+    active: 'Actif',
+    inactive: 'Inactif',
+    creSuccess: 'Responsable ajouté avec succès',
+    editSuccess: 'Responsable mis à jour avec succès',
+    save: 'Enregistrer'
   },
   settings: {
     title: 'Paramètres',
@@ -346,7 +391,15 @@ const fr = {
     maxChars3000: 'Maximum 3000 caractères',
     loading: 'Chargement...',
     error: 'Erreur de chargement',
-    retry: 'Réessayer'
+    retry: 'Réessayer',
+    attachments: 'Pièces jointes',
+    location: 'Localisation',
+    reported: 'Signalé',
+    assignedOwner: 'Responsable assigné',
+    assignedTeamMember: 'Membre de l\'équipe assigné',
+    assignTeamMember: 'Attribuer un membre pour intervenir',
+    activity: 'Activité',
+    exactLocation: 'Emplacement exact'
   },
   progressTypes: {
     STARTED: 'Début intervention',
@@ -366,7 +419,9 @@ const fr = {
     PROGRESS_ADDED: 'Mise à jour ajoutée',
     COMMENT_ADDED: 'Commentaire ajouté',
     ATTACHMENT_ADDED: 'Pièce jointe ajoutée',
-    REASSIGNMENT_REQUESTED: 'Réaffectation demandée'
+    REASSIGNMENT_REQUESTED: 'Réaffectation demandée',
+    TRIAGE: 'Triage effectué',
+    VERIFIED: 'Vérifié'
   },
   toasts: {
     responsableAssigned: 'Responsable affecté',

@@ -22,6 +22,7 @@ export function StatusModal({ status, title, message, onClose, onRetry, autoClos
     }
   }, [status, autoClose, onClose]);
 
+  /* Scroll lock: prevent background scrolling while modal is open. */
   useEffect(() => {
     if (onClose) document.body.classList.add('no-scroll');
     return () => { if (onClose) document.body.classList.remove('no-scroll'); };
@@ -29,9 +30,9 @@ export function StatusModal({ status, title, message, onClose, onRetry, autoClos
 
   const icons = {
     loading: <Spinner size={32} />,
-    success: <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#e8f2ef', color: '#286c61', display: 'grid', placeItems: 'center' }}><CheckCircle size={32} /></div>,
+    success: <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#eff6ff', color: '#2563eb', display: 'grid', placeItems: 'center' }}><CheckCircle size={32} /></div>,
     error: <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fef2f2', color: '#b91c1c', display: 'grid', placeItems: 'center' }}><XCircle size={32} /></div>,
-    empty: <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f0f5f4', color: '#7a8e93', display: 'grid', placeItems: 'center' }}><AlertTriangle size={32} /></div>
+    empty: <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f1f5f9', color: '#64748b', display: 'grid', placeItems: 'center' }}><AlertTriangle size={32} /></div>
   };
 
   const titles = {
@@ -53,10 +54,10 @@ export function StatusModal({ status, title, message, onClose, onRetry, autoClos
       <div className="status-modal" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '36px 32px', textAlign: 'center' }}>
           {icons[status]}
-          <div style={{ fontFamily: 'Manrope, sans-serif', fontSize: 18, fontWeight: 700, color: '#1a2b32', marginTop: 20, marginBottom: 8 }}>
+          <div style={{ fontFamily: 'Manrope, sans-serif', fontSize: 18, fontWeight: 700, color: '#0f172a', marginTop: 20, marginBottom: 8 }}>
             {titles[status]}
           </div>
-          <div style={{ fontSize: 14, color: '#6b7e83', lineHeight: 1.5, maxWidth: 300, marginBottom: status === 'error' || status === 'empty' ? 24 : 0 }}>
+          <div style={{ fontSize: 14, color: '#64748b', lineHeight: 1.5, maxWidth: 300, marginBottom: status === 'error' || status === 'empty' ? 24 : 0 }}>
             {messages[status]}
           </div>
           {status === 'error' && onRetry && (

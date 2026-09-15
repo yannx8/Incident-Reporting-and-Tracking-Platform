@@ -33,6 +33,11 @@ interface MapSite {
   _count?: { incidents?: number };
 }
 
+/**
+ * Operational map page. Uses raw Leaflet instead of react-leaflet to avoid
+ * react-leaflet's SSR hydration mismatches and to have direct control over
+ * marker lifecycle (important when filtering dynamically).
+ */
 export function MapPage() {
   const u = useAuth((s) => s.user)!;
   const t = useI18n((s) => s.t);
@@ -51,10 +56,13 @@ export function MapPage() {
   const [filterSite, setFilterSite] = useState('');
   const [filterAssignment, setFilterAssignment] = useState('');
   const [search, setSearch] = useState('');
+  const [satellite, setSatellite] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Layer>>(new Map());
+  const tileRef = useRef<L.TileLayer | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -85,6 +93,7 @@ export function MapPage() {
 
   const filteredIncidents = useMemo(() => {
     let list = incidents;
+    /* Responders only see incidents assigned to them or new/assigned ones */
     if (isResp) {
       list = list.filter((i) => i.assignedTo || i.status === 'NEW' || i.status === 'ASSIGNED');
     }
@@ -124,9 +133,10 @@ export function MapPage() {
   const initMap = useCallback(() => {
     if (!ref.current || mapRef.current) return;
     const map = L.map(ref.current, { zoomControl: false }).setView([4.052, 9.768], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
+    tileRef.current = street;
     L.control.zoom({ position: 'topright' }).addTo(map);
     mapRef.current = map;
   }, []);
@@ -135,6 +145,37 @@ export function MapPage() {
   useEffect(() => {
     return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !tileRef.current) return;
+    map.removeLayer(tileRef.current);
+    const layer = satellite
+      ? L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: 'Tiles &copy; Esri'
+        })
+      : L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors'
+        });
+    layer.addTo(map);
+    tileRef.current = layer;
+  }, [satellite]);
+
+  const myLocation = () => {
+    if (!mapRef.current) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        mapRef.current!.setView([pos.coords.latitude, pos.coords.longitude], 15);
+        L.circleMarker([pos.coords.latitude, pos.coords.longitude], {
+          radius: 8, color: '#2563eb', weight: 2, fillColor: '#2563eb', fillOpacity: 0.3
+        }).addTo(mapRef.current!);
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { timeout: 8000 }
+    );
+  };
 
   const fitBounds = useCallback((items: { latitude: number; longitude: number }[]) => {
     const map = mapRef.current;
@@ -169,13 +210,13 @@ export function MapPage() {
     });
 
     filteredIncidents.forEach((i) => {
-      const color = PRIORITY_COLORS[i.priority] || '#4aae93';
+      const color = PRIORITY_COLORS[i.priority] || '#2563eb';
       const isSelected = selectedId === i.id;
       const radius = isSelected ? 10 : 7;
       const weight = isSelected ? 3 : 2;
       const cm = L.circleMarker([i.latitude, i.longitude], {
         radius,
-        color: isSelected ? '#1a2b32' : '#fff',
+        color: isSelected ? '#1d4ed8' : '#fff',
         weight,
         fillColor: color,
         fillOpacity: 0.9
@@ -195,6 +236,8 @@ export function MapPage() {
     }
   }, [filteredIncidents, sites, loading, selectedId, fitBounds, t]);
 
+  /* Leaflet popups render as raw HTML. We attach a global handler so the popup's
+     onclick="window.__openDrawer(...)" can trigger React state updates. */
   useEffect(() => {
     (window as any).__openDrawer = (id: string) => { setDrawerId(id); };
     return () => { delete (window as any).__openDrawer; };
@@ -294,6 +337,23 @@ export function MapPage() {
         <div className="opmap-layout">
           <div className="opmap-map-area">
             <div ref={ref} className="opmap-map" />
+            <div className="map-controls-top-right">
+              <button
+                className={`map-ctrl-btn ${satellite ? 'map-ctrl-active' : ''}`}
+                title={satellite ? t('map.streetView') : t('map.satelliteView')}
+                onClick={() => setSatellite((s) => !s)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+              </button>
+              <button
+                className={`map-ctrl-btn ${locating ? 'map-ctrl-active' : ''}`}
+                title={t('map.myLocation')}
+                onClick={myLocation}
+                disabled={locating}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/></svg>
+              </button>
+            </div>
             <div className="opmap-legend">
               <div className="opmap-legend-title">{t('map.legend')}</div>
               <div className="opmap-legend-section">
@@ -312,7 +372,7 @@ export function MapPage() {
                   <span>{t('map.site')}</span>
                 </div>
                 <div className="opmap-legend-item">
-                  <span className="map-dot" style={{ background: '#4aae93' }} />
+                  <span className="map-dot" style={{ background: '#2563EB' }} />
                   <span>{t('map.incident')}</span>
                 </div>
               </div>

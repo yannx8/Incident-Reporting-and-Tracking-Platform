@@ -1,15 +1,18 @@
 const en = {
   nav: {
+    overview: 'Overview',
     dashboard: 'Dashboard',
     incidents: 'Incidents',
     map: 'Operational map',
     team: 'Team',
+    teams: 'Teams',
     sites: 'Sites',
     profile: 'Profile',
     settings: 'Settings',
     logout: 'Sign out',
     navigation: 'NAVIGATION',
-    administration: 'ADMINISTRATION'
+    administration: 'ADMINISTRATION',
+    workspace: 'Operations'
   },
   dashboard: {
     eyebrow: 'OVERVIEW',
@@ -21,6 +24,7 @@ const en = {
     },
     userSubtitle: 'Manage your incident reports',
     adminSubtitle: 'Here\'s what needs your attention',
+    allSystemsOperational: 'All systems operational',
     reportIncident: 'Report an incident',
     newIncident: 'New incident',
     kpi: {
@@ -34,6 +38,10 @@ const en = {
       resolvedRate: 'Resolution rate',
       activeIncidents: 'Active incidents',
       activeSub: 'Total incidents',
+      critical: 'Critical',
+      criticalSub: 'Require immediate attention',
+      toReview: 'To review',
+      toReviewSub: 'Resolutions pending',
       myAssignments: 'My assignments',
       totalAssigned: 'Total assigned',
       toAccept: 'To accept',
@@ -59,6 +67,10 @@ const en = {
       recentActivitySub: 'Latest updates',
       priorities: 'Priorities',
       prioritiesSub: 'Distribution by level',
+      categories: 'Categories',
+      categoriesSub: 'Distribution by type',
+      trend: 'Trend',
+      trendSub: 'Incidents over the last 7 days',
       mesIncidents: 'My incidents',
       assigned: 'Assigned',
       submitted: 'Submitted'
@@ -90,6 +102,8 @@ const en = {
     search: 'Search incidents...',
     filterStatus: 'All statuses',
     filterPriority: 'All priorities',
+    filterCategory: 'All categories',
+    filterSite: 'All sites',
     empty: 'No incidents found',
     emptyFiltered: 'Modify your filters to find incidents',
     emptyCreate: 'Start by reporting your first incident',
@@ -214,7 +228,10 @@ const en = {
     awaitingAcceptance: 'To accept',
     inProgressStatus: 'In progress',
     resolved: 'To verify',
-    closed: 'Closed'
+    closed: 'Closed',
+    satelliteView: 'Satellite view',
+    streetView: 'Street view',
+    myLocation: 'My location'
   },
   sites: {
     title: 'Sites',
@@ -252,7 +269,35 @@ const en = {
     subtitle: 'Manager management',
     members: 'manager(s)',
     organization: 'in your organization',
-    empty: 'No managers registered'
+    empty: 'No managers registered',
+    emptyDesc: 'Add your first manager to start assigning incidents',
+    add: 'Add manager',
+    edit: 'Edit manager',
+    deactivate: 'Deactivate',
+    reactivate: 'Reactivate',
+    deactivateSuccess: 'Manager deactivated',
+    reactivateSuccess: 'Manager reactivated',
+    deactivateTitle: 'Deactivate manager',
+    deactivateMessage: 'This manager will no longer receive new assignments. Deactivate',
+    createSubtitle: 'Promote an existing member to manager',
+    editSubtitle: 'Update specialties, sites and availability',
+    member: 'Member',
+    memberPlaceholder: 'Select a member to promote...',
+    searchMember: 'Search by name or email...',
+    noCandidates: 'No members available to promote',
+    selectMember: 'Please select a member',
+    specialties: 'Specialties',
+    noSpecialties: 'No specialties yet. Create one below.',
+    newSpecialty: 'New specialty name...',
+    addSpecialty: 'Create',
+    sites: 'Assigned sites',
+    noSites: 'No sites assigned yet',
+    status: 'Availability',
+    active: 'Active',
+    inactive: 'Inactive',
+    creSuccess: 'Manager added successfully',
+    editSuccess: 'Manager updated successfully',
+    save: 'Save'
   },
   settings: {
     title: 'Settings',
@@ -346,7 +391,15 @@ const en = {
     maxChars3000: 'Maximum 3000 characters',
     loading: 'Loading...',
     error: 'Loading error',
-    retry: 'Retry'
+    retry: 'Retry',
+    attachments: 'Attachments',
+    location: 'Location',
+    reported: 'Reported',
+    assignedOwner: 'Assigned owner',
+    assignedTeamMember: 'Assigned team member',
+    assignTeamMember: 'Assign a team member to respond',
+    activity: 'Activity',
+    exactLocation: 'Exact location'
   },
   progressTypes: {
     STARTED: 'Intervention started',
@@ -366,7 +419,9 @@ const en = {
     PROGRESS_ADDED: 'Progress update added',
     COMMENT_ADDED: 'Comment added',
     ATTACHMENT_ADDED: 'Attachment added',
-    REASSIGNMENT_REQUESTED: 'Reassignment requested'
+    REASSIGNMENT_REQUESTED: 'Reassignment requested',
+    TRIAGE: 'Triage completed',
+    VERIFIED: 'Verified'
   },
   toasts: {
     responsableAssigned: 'Manager assigned',

@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   Building2,
-  ChevronDown,
   ChevronRight,
   ClipboardList,
   Globe,
@@ -21,8 +20,6 @@ import { BrandMark } from '../shared/BrandMark';
 import { NavItem } from './NavItem';
 import { NotificationsPanel } from './NotificationsPanel';
 
-
-
 export function AppShell({ children }: { children: React.ReactNode }) {
   const u = useAuth((s) => s.user)!;
   const logout = useAuth((s) => s.logout);
@@ -39,20 +36,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [load]);
 
   const unread = items.filter((x) => !x.readAt).length;
-  const admin = u.roles.includes('ADMINISTRATOR');
-  const responsable = u.roles.includes('RESPONSABLE');
+  const roles = u.roles;
+  const admin = roles.includes('ADMINISTRATOR');
+  const responsable = roles.includes('RESPONSABLE');
   const canSeeMap = admin || responsable;
+  const roleLabel: Record<string, string> = { ADMINISTRATOR: 'Admin', RESPONSABLE: 'Responsable', USER: 'User' };
   const initials = u.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
   const viewTitle = useMemo(() => {
     const map: Record<string, string> = {
-      '/': t('dashboard.title'),
-      '/incidents': t('incidents.title'),
-      '/map': t('map.title'),
-      '/team': t('team.title'),
-      '/sites': t('sites.title'),
+      '/': t('nav.overview'),
+      '/incidents': t('nav.incidents'),
+      '/map': t('nav.map'),
+      '/team': t('nav.teams'),
+      '/sites': t('nav.sites'),
       '/profile': t('profile.title'),
-      '/settings': t('settings.title')
+      '/settings': t('nav.settings')
     };
     return map[loc.pathname] || loc.pathname.slice(1);
   }, [loc.pathname, t]);
@@ -72,7 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <BrandMark />
           <div>
             <strong>NEXUS</strong>
-            <small>INCIDENTS</small>
+            <small>INCIDENT CONTROL</small>
           </div>
         </div>
 
@@ -82,20 +81,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="org-copy">
             <strong>{u.organizationName}</strong>
+            <small>{admin ? 'Operational workspace' : 'Incident workspace'}</small>
           </div>
+          <ChevronRight size={15} className="org-chevron" />
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-label">{t('nav.navigation')}</div>
-          <NavItem to="/" icon={<LayoutDashboard />} text={t('nav.dashboard')} active={loc.pathname === '/'} />
+          <div className="nav-label">WORKSPACE</div>
+          <NavItem to="/" icon={<LayoutDashboard />} text={t('nav.overview')} active={loc.pathname === '/'} />
           <NavItem to="/incidents" icon={<ClipboardList />} text={t('nav.incidents')} active={loc.pathname === '/incidents'} />
           {canSeeMap && (
             <NavItem to="/map" icon={<MapIcon />} text={t('nav.map')} active={loc.pathname === '/map'} />
           )}
           {admin && (
             <>
-              <div className="nav-label nav-label-spaced">{t('nav.administration')}</div>
-              <NavItem to="/team" icon={<Users />} text={t('nav.team')} active={loc.pathname === '/team'} />
+              <NavItem to="/team" icon={<Users />} text={t('nav.teams')} active={loc.pathname === '/team'} />
               <NavItem to="/sites" icon={<Building2 />} text={t('nav.sites')} active={loc.pathname === '/sites'} />
             </>
           )}
@@ -103,34 +103,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="sidebar-bottom">
           <NavItem to="/settings" icon={<Settings />} text={t('nav.settings')} active={loc.pathname === '/settings'} />
-          <button className="nav-item" onClick={handleLogout}>
-            <LogOut size={18} strokeWidth={1.8} />
-            <span>{t('nav.logout')}</span>
-          </button>
           <button className="user-mini" onClick={() => { closeSidebar(); nav('/profile'); }}>
             <div className="avatar-green">{initials}</div>
             <div className="user-mini-info">
               <span className="user-mini-name">{u.name}</span>
-              <span className="user-mini-role">{t(`roles.${u.roles[0]}` as any) || u.roles[0]}</span>
+              <span className="user-mini-role">{roleLabel[roles[0]] || roles[0]}</span>
             </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#64748B', flexShrink: 0 }}><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </button>
+          <button className="sidebar-logout" onClick={handleLogout}>
+            <LogOut size={14} />
+            {t('nav.logout')}
           </button>
         </div>
       </aside>
 
       <div className="content-shell">
         <header className="topbar">
-          <button className="icon-button mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-            <Menu size={21} />
-          </button>
-          <div className="breadcrumbs">
-            <span>{u.organizationName}</span>
-            <ChevronRight size={14} />
-            <strong>{viewTitle}</strong>
+          <div className="topbar-left">
+            <button className="icon-button mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+              <Menu size={20} />
+            </button>
+            <div className="breadcrumbs">
+              <span>{t('nav.workspace')}</span>
+              <ChevronRight size={14} />
+              <strong>{viewTitle}</strong>
+            </div>
           </div>
           <div className="top-actions">
             <button className="icon-button" onClick={() => setLocale(locale === 'fr' ? 'en' : 'fr')} title={locale === 'fr' ? 'Switch to English' : 'Passer en français'}>
               <Globe size={18} />
-              <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 2 }}>{locale.toUpperCase()}</span>
+              <span className="lang-toggle">{locale.toUpperCase()}</span>
             </button>
             <button className="icon-button" onClick={() => setNotifOpen(!notifOpen)} style={{ position: 'relative' }}>
               <Bell size={19} />
@@ -138,9 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
             <div className="top-divider" />
             <button className="profile-button" onClick={() => nav('/profile')}>
-              <div className="avatar avatar-orange">{initials}</div>
-              <span>{u.name.split(' ')[0]}</span>
-              <ChevronDown size={14} color="#8b9a9e" />
+              <div className="avatar avatar-green" style={{ background: '#2563EB', color: '#fff' }}>{initials}</div>
             </button>
           </div>
         </header>

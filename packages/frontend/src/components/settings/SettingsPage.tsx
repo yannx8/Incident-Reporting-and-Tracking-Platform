@@ -20,6 +20,7 @@ export function SettingsPage() {
     USER: t('roles.USER')
   };
 
+  /* Notification toggles are client-only for now (no backend persistence). */
   const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);

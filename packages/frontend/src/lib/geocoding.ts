@@ -19,7 +19,7 @@ const USER_AGENT = 'NexusIncidents/1.0';
 
 let searchAbort: AbortController | null = null;
 
-export async function searchLocations(query: string): Promise<GeocodingResult[]> {
+export async function searchLocations(query: string, locale = 'en'): Promise<GeocodingResult[]> {
   if (!query.trim() || query.trim().length < 2) return [];
 
   if (searchAbort) searchAbort.abort();
@@ -31,7 +31,7 @@ export async function searchLocations(query: string): Promise<GeocodingResult[]>
       format: 'json',
       addressdetails: '1',
       limit: '6',
-      'accept-language': 'fr'
+      'accept-language': locale
     });
 
     const res = await fetch(`${NOMINATIM_BASE}/search?${params}`, {
@@ -53,14 +53,14 @@ export async function searchLocations(query: string): Promise<GeocodingResult[]>
   }
 }
 
-export async function reverseGeocode(lat: number, lng: number): Promise<GeocodingResult | null> {
+export async function reverseGeocode(lat: number, lng: number, locale = 'en'): Promise<GeocodingResult | null> {
   try {
     const params = new URLSearchParams({
       lat: String(lat),
       lon: String(lng),
       format: 'json',
       addressdetails: '1',
-      'accept-language': 'fr'
+      'accept-language': locale
     });
 
     const res = await fetch(`${NOMINATIM_BASE}/reverse?${params}`, {

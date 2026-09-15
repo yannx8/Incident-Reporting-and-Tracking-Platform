@@ -50,11 +50,11 @@ export function ProfilePage() {
               {initials}
             </div>
             <div>
-              <div style={{ fontFamily: 'Manrope, sans-serif', fontSize: 20, fontWeight: 700, color: '#1a2b32' }}>{u.name}</div>
-              <div style={{ fontSize: 13, color: '#6b7e83', marginTop: 2 }}>{u.email}</div>
+              <div style={{ fontFamily: 'Manrope, sans-serif', fontSize: 20, fontWeight: 700, color: '#0f172a' }}>{u.name}</div>
+              <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{u.email}</div>
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 {u.roles.map((r) => (
-                  <span key={r} style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, background: r === 'ADMINISTRATOR' ? '#e8f2ef' : r === 'RESPONSABLE' ? '#efecf7' : '#f0f5f4', color: r === 'ADMINISTRATOR' ? '#286c61' : r === 'RESPONSABLE' ? '#75629a' : '#4d7d77' }}>
+                  <span key={r} style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, background: r === 'ADMINISTRATOR' ? '#eff6ff' : r === 'RESPONSABLE' ? '#f5f3ff' : '#f1f5f9', color: r === 'ADMINISTRATOR' ? '#2563eb' : r === 'RESPONSABLE' ? '#7c3aed' : '#334155' }}>
                     {t(`roles.${r}` as any) || r}
                   </span>
                 ))}
@@ -63,7 +63,7 @@ export function ProfilePage() {
           </div>
 
           {success && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: '#e8f2ef', border: '1px solid #c0e6da', borderRadius: 10, marginBottom: 20, color: '#286c61', fontSize: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, marginBottom: 20, color: '#2563eb', fontSize: 14 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
               {success}
             </div>
@@ -79,45 +79,46 @@ export function ProfilePage() {
           <form onSubmit={handleSave}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#3a3a3a', marginBottom: 6 }}>{t('profile.name')}</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#f7f9f9', borderRadius: 8, border: '1px solid #e4eaeb' }}>
-                  <User size={16} color="#7a8e93" />
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>{t('profile.name')}</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#f1f5f9', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <User size={16} color="#64748b" />
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
-                    style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 14, color: '#1a2b32', outline: 'none' }}
+                    style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 14, color: '#0f172a', outline: 'none' }}
                   />
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#3a3a3a', marginBottom: 6 }}>{t('settings.email')}</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#f7f9f9', borderRadius: 8, border: '1px solid #e4eaeb' }}>
-                  <Mail size={16} color="#7a8e93" />
-                  <span style={{ fontSize: 14, color: '#6b7e83' }}>{u.email}</span>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>{t('settings.email')}</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#f1f5f9', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <Mail size={16} color="#64748b" />
+                  <span style={{ fontSize: 14, color: '#64748b' }}>{u.email}</span>
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#3a3a3a', marginBottom: 6 }}>{t('settings.organization')}</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#f7f9f9', borderRadius: 8, border: '1px solid #e4eaeb' }}>
-                  <Building2 size={16} color="#7a8e93" />
-                  <span style={{ fontSize: 14, color: '#6b7e83' }}>{u.organizationName}</span>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>{t('settings.organization')}</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#f1f5f9', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <Building2 size={16} color="#64748b" />
+                  <span style={{ fontSize: 14, color: '#64748b' }}>{u.organizationName}</span>
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#3a3a3a', marginBottom: 6 }}>{t('settings.role')}</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#f7f9f9', borderRadius: 8, border: '1px solid #e4eaeb' }}>
-                  <Shield size={16} color="#7a8e93" />
-                  <span style={{ fontSize: 14, color: '#6b7e83' }}>{t(`roles.${u.roles[0]}` as any) || u.roles[0]}</span>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>{t('settings.role')}</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#f1f5f9', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <Shield size={16} color="#64748b" />
+                  <span style={{ fontSize: 14, color: '#64748b' }}>{t(`roles.${u.roles[0]}` as any) || u.roles[0]}</span>
                 </div>
               </div>
             </div>
 
             <div style={{ marginTop: 28, display: 'flex', gap: 10 }}>
+              {/* Disable submit when name unchanged or while saving */}
               <button type="submit" className="button button-primary" disabled={saving || name === u.name}>
                 {saving ? <Spinner size={14} /> : <><Save size={15} /> {t('profile.save')}</>}
               </button>

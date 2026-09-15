@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, X } from 'lucide-react';
+import { Bell, X, AlertTriangle } from 'lucide-react';
 import { useNotifications } from '../../store/notificationStore';
 import { notifIconClass } from '../../constants';
 import { Spinner } from '../shared/Spinner';
@@ -8,14 +8,20 @@ import { useI18n } from '../../i18n';
 export function NotificationsPanel({ onClose }: { onClose: () => void }) {
   const { items, load, read } = useNotifications();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const panelRef = React.useRef<HTMLDivElement>(null);
   const t = useI18n((s) => s.t);
 
   useEffect(() => {
     setLoading(true);
-    load().finally(() => setLoading(false));
-  }, [load]);
+    setError('');
+    load()
+      .catch((err) => setError(err.message || t('errors.loadFailed')))
+      .finally(() => setLoading(false));
+  }, [load, t]);
 
+  // Close panel on outside click. Uses mousedown (not click) so the panel
+  // dismisses before any click-through element receives focus.
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
@@ -42,8 +48,13 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
       </div>
       {loading ? (
         <div style={{ padding: 24, textAlign: 'center' }}><Spinner size={18} /></div>
+      ) : error ? (
+        <div style={{ padding: 24, textAlign: 'center', color: '#c76b3c', fontSize: 11 }}>
+          <AlertTriangle size={16} style={{ marginBottom: 4 }} />
+          <div>{error}</div>
+        </div>
       ) : items.length === 0 ? (
-        <div style={{ padding: 24, textAlign: 'center', color: '#9aa8ab', fontSize: 11 }}>
+        <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 11 }}>
           {t('notifications.empty')}
         </div>
       ) : (

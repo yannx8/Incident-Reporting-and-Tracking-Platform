@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, ChevronRight, ClipboardList, Send, Crosshair, X, CheckCircle, AlertTriangle, ArrowLeft, Upload } from 'lucide-react';
+import { Plus, Search, ChevronRight, ClipboardList, Send, X, CheckCircle, AlertTriangle, Upload } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../store/authStore';
 import { Incident, Site } from '../../types';
@@ -21,30 +21,38 @@ export function Incidents() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [priority, setPriority] = useState('');
+  const [category, setCategory] = useState('');
+  const [siteFilter, setSiteFilter] = useState('');
+  const [sites, setSites] = useState<Site[]>([]);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [selected, setSelected] = useState<string | null>(null);
   const [create, setCreate] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const t = useI18n((s) => s.t);
   const formatDate = useFormatDate();
+  const isAdmin = u.roles.includes('ADMINISTRATOR');
 
   const load = useCallback(() => {
     setLoading(true);
     setError('');
     api(
-      `/incidents?limit=50&page=${page}` +
+      `/incidents?limit=${limit}&page=${page}` +
       (q ? '&search=' + encodeURIComponent(q) : '') +
       (status ? '&status=' + status : '') +
-      (priority ? '&priority=' + priority : '')
+      (priority ? '&priority=' + priority : '') +
+      (category ? '&category=' + category : '') +
+      (isAdmin && siteFilter ? '&siteId=' + siteFilter : '')
     ).then(setData)
       .catch((err) => setError(err.message || t('errors.loadFailed')))
       .finally(() => setLoading(false));
-  }, [page, q, status, priority, t]);
+  }, [page, limit, q, status, priority, category, siteFilter, isAdmin, t]);
 
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (searchParams.get('new')) setCreate(true);
+    api<Site[]>('/sites').then(setSites).catch(() => setSites([]));
   }, [searchParams]);
 
   return (
@@ -67,7 +75,7 @@ export function Incidents() {
             <input
               placeholder={t('incidents.search')}
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => { setQ(e.target.value); setPage(1); }}
               onKeyDown={(e) => e.key === 'Enter' && load()}
             />
           </div>
@@ -84,6 +92,18 @@ export function Incidents() {
                 <option key={k} value={k}>{t(`priorities.${k}` as any)}</option>
               ))}
             </select>
+            <select className="filter-select" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
+              <option value="">{t('incidents.filterCategory')}</option>
+              {Object.keys(CATEGORY_LABELS).map((k) => (
+                <option key={k} value={k}>{t(`categories.${k}` as any)}</option>
+              ))}
+            </select>
+            {isAdmin && (
+              <select className="filter-select" value={siteFilter} onChange={(e) => { setSiteFilter(e.target.value); setPage(1); }}>
+                <option value="">{t('incidents.filterSite')}</option>
+                {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
           </div>
         </div>
 
@@ -105,11 +125,11 @@ export function Incidents() {
             <ClipboardList size={32} className="empty-icon" />
             <div className="empty-title">{t('incidents.empty')}</div>
             <div className="empty-desc">
-              {q || status || priority
+              {q || status || priority || category || (isAdmin && siteFilter)
                 ? t('incidents.emptyFiltered')
                 : t('incidents.emptyCreate')}
             </div>
-            {!(q || status || priority) && (
+            {!(q || status || priority || category || (isAdmin && siteFilter)) && (
               <button className="button button-primary" onClick={() => setCreate(true)}>
                 <Plus size={16} /> {t('incidents.create')}
               </button>
@@ -144,10 +164,20 @@ export function Incidents() {
 
             <div className="table-footer">
               <span>{data.total || 0} {t('incidents.total')}</span>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button className="page-btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>&lsaquo;</button>
-                <button className="page-btn page-btn-active">{page}</button>
-                <button className="page-btn" disabled={data.items.length < 50} onClick={() => setPage((p) => p + 1)}>&rsaquo;</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select
+                  className="filter-select"
+                  value={limit}
+                  onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+                  style={{ width: 60, fontSize: 11 }}
+                >
+                  {[10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="page-btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>&lsaquo;</button>
+                  <span className="page-btn page-btn-active">{page} / {Math.max(1, Math.ceil(data.total / limit))}</span>
+                  <button className="page-btn" disabled={page >= Math.ceil(data.total / limit)} onClick={() => setPage((p) => p + 1)}>&rsaquo;</button>
+                </div>
               </div>
             </div>
           </>
@@ -179,6 +209,7 @@ export function Incidents() {
   );
 }
 
+/** Multi-step incident creation: 1) description + photo, 2) site + location + category, 3) submit, 4) success. */
 function CreateIncident({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [step, setStep] = useState(1);
   const [sites, setSites] = useState<Site[]>([]);
@@ -198,8 +229,6 @@ function CreateIncident({ onClose, onCreated }: { onClose: () => void; onCreated
   const [apiErr, setApiErr] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
-  const [aiClassifying, setAiClassifying] = useState(false);
-  const [aiResult, setAiResult] = useState<{ priority: string; category: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const t = useI18n((s) => s.t);
 
@@ -228,6 +257,7 @@ function CreateIncident({ onClose, onCreated }: { onClose: () => void; onCreated
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
+    /* 5 MB client-side limit to reduce unnecessary upload attempts */
     if (f.size > 5 * 1024 * 1024) { setErrors((e) => ({ ...e, photo: t('incidents.fileTooLarge') })); return; }
     setPhoto(f);
     setPhotoPreview(URL.createObjectURL(f));
@@ -261,19 +291,6 @@ function CreateIncident({ onClose, onCreated }: { onClose: () => void; onCreated
   const next = () => {
     if (step === 1 && !validateStep1()) return;
     if (step === 2 && !validateStep2()) return;
-    if (step === 1) {
-      setAiClassifying(true);
-      const siteName = sites.find((s) => s.id === form.siteId)?.name || '';
-      api<{ priority: string; category: string; confidence: number }>('/incidents/classify', {
-        method: 'POST',
-        body: JSON.stringify({ description: form.description, siteName })
-      }).then((r) => {
-        if (r.priority && r.confidence >= 0.6) {
-          setAiResult({ priority: r.priority, category: r.category });
-          setForm((f) => ({ ...f, priority: r.priority, category: r.category }));
-        }
-      }).catch(() => {}).finally(() => setAiClassifying(false));
-    }
     setStep((s) => Math.min(s + 1, 3));
   };
 
@@ -284,7 +301,7 @@ function CreateIncident({ onClose, onCreated }: { onClose: () => void; onCreated
       const d = await api<Incident>('/incidents', {
         method: 'POST',
         body: JSON.stringify({
-          title: form.description.slice(0, 80),
+          title: form.description.slice(0, 80), // Derive title from description for quick creation
           description: form.description,
           category: form.category,
           priority: form.priority,
@@ -403,6 +420,7 @@ function CreateIncident({ onClose, onCreated }: { onClose: () => void; onCreated
                     <Upload size={18} />
                     <span>{t('incidents.photoHint')}</span>
                     <small>{t('incidents.photoFormats')}</small>
+                    {/* accept attr is a browser hint only; server validates via magic bytes */}
                     <input ref={fileRef} id="photo-input" type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={handlePhoto} />
                   </label>
                 )}
@@ -470,15 +488,6 @@ function CreateIncident({ onClose, onCreated }: { onClose: () => void; onCreated
                   </select>
                 </div>
               </div>
-              {aiClassifying && (
-                <div className="create-ai-badge"><Spinner size={12} /> {t('incidents.aiClassifying')}</div>
-              )}
-              {aiResult && (
-                <div className="create-ai-result">
-                  <span className="create-ai-dot" />
-                  {t('incidents.aiResult')} {t(`priorities.${aiResult.priority}` as any)} / {t(`categories.${aiResult.category}` as any)}
-                </div>
-              )}
             </div>
           )}
 

@@ -1,7 +1,12 @@
 import { StatusBadge } from '../shared/StatusBadge';
 import { statusDotClass } from '../../constants';
 
+/**
+ * Horizontal bar chart showing incident counts per status.
+ * Each bar's width is a percentage of the total.
+ */
 export function StatusDistribution({ data }: { data: any[] }) {
+  // Default to 1 to avoid division by zero when dataset is empty.
   const total = data.reduce((s: number, x: any) => s + x._count, 0) || 1;
   return (
     <div style={{ padding: '8px 19px 16px' }}>

@@ -2,6 +2,7 @@ import { AuthUser } from '../types';
 
 const base = '/api';
 let accessToken: string | null = null;
+// Deduplicates concurrent refresh calls so only one request hits the server
 let refreshPromise: Promise<string | null> | null = null;
 
 export function setAccessToken(token: string | null) {
@@ -14,6 +15,9 @@ async function refresh() {
     .then(async (r) => {
       if (!r.ok) {
         accessToken = null;
+        // Refresh token expired or revoked - clear state so the app
+        // can redirect to login on the next auth check
+        window.dispatchEvent(new Event('auth:logout'));
         return null;
       }
       const d = await r.json();
@@ -35,9 +39,13 @@ export async function api<T = any>(path: string, opts: RequestInit = {}, retry =
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
   const controller = new AbortController();
+  // 8s timeout prevents stale connections from blocking the UI; backend
+  // health checks and simple queries should always finish well under this
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     let r = await fetch(base + path, { ...opts, headers, credentials: 'include', signal: controller.signal });
+    // Silent refresh on first 401; retry=false avoids infinite loop if
+    // the refresh token itself is expired
     if (r.status === 401 && retry && path !== '/auth/refresh') {
       const t = await refresh();
       if (t) return api<T>(path, opts, false);
@@ -84,7 +92,7 @@ export async function apiRegister(
   email: string,
   password: string,
   organizationSlug = 'horizon'
-): Promise<{ user: AuthUser; verificationCode?: string }> {
+): Promise<void> {
   const r = await fetch(base + '/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -98,24 +106,7 @@ export async function apiRegister(
     err.status = r.status;
     throw err;
   }
-  return d;
-}
-
-export async function apiVerify(code: string): Promise<boolean> {
-  const r = await fetch(base + '/auth/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ code })
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const err: any = new Error(d.error?.message || 'Code de vérification invalide');
-    err.code = d.error?.code;
-    err.status = r.status;
-    throw err;
-  }
-  return true;
+  if (d.accessToken) setAccessToken(d.accessToken);
 }
 
 export async function apiGetMe(): Promise<AuthUser> {

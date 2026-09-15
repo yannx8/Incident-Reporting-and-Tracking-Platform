@@ -1,3 +1,5 @@
+// French fallback labels used when the i18n key is not available or for
+// components that predate the i18n system (e.g. status badges, priority pills)
 export const statusLabels: Record<string, string> = {
   NEW: 'Nouveau',
   ASSIGNED: 'Assigné',
@@ -24,6 +26,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
   OTHER: 'Autre'
 };
 
+// Maps priority level to the CSS class that controls its background/color;
+// used in category badges and incident cards to keep styling data-driven
 export const categoryPriorityClass: Record<string, string> = {
   CRITICAL: 'category-critical',
   HIGH: 'category-high',
@@ -54,8 +58,9 @@ export const priorityClassMap: Record<string, string> = {
   CRITICAL: 'priority-critical'
 };
 
-export const siteColors = ['#286c61', '#c7783a', '#6a5a9a', '#98a6af'];
+export const siteColors = ['#2563EB', '#D97706', '#7C3AED', '#0EA5E9'];
 
+// CRITICAL and HIGH share the same warning style in the notification bell
 export const notifIconClass: Record<string, string> = {
   CRITICAL: 'notif-critical',
   HIGH: 'notif-critical',
@@ -78,6 +83,6 @@ export const timelineDotClass: Record<string, string> = {
 export const PRIORITY_COLORS: Record<string, string> = {
   CRITICAL: '#dc2626',
   HIGH: '#ea580c',
-  MEDIUM: '#ca8a04',
-  LOW: '#16a34a'
+  MEDIUM: '#d97706',
+  LOW: '#65a30d'
 };

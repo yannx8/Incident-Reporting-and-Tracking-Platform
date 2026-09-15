@@ -4,6 +4,10 @@ import { api } from '../../api/client';
 import { useI18n } from '../../i18n';
 import { timeAgo, useTimeAgo } from '../../lib/utils';
 
+/**
+ * Lists the 5 most recent incidents with status-based color coding.
+ * Used as a secondary widget on the admin dashboard.
+ */
 export function RecentActivity() {
   const [events, setEvents] = useState<any[]>([]);
   const t = useI18n((s) => s.t);
@@ -17,10 +21,11 @@ export function RecentActivity() {
       .catch((err) => console.error('Failed to load recent activity:', err));
   }, []);
 
+  // Status-to-color mapping kept inline for quick reference during maintenance.
   const symbolColors: Record<string, string> = {
     NEW: '#e0a263',
     ASSIGNED: '#9b89c2',
-    IN_PROGRESS: '#4aae93',
+    IN_PROGRESS: '#059669',
     RESOLVED: '#6db3e0',
     CLOSED: '#aeb7b9'
   };
@@ -34,7 +39,7 @@ export function RecentActivity() {
       ) : (
         events.map((e: any) => (
           <div key={e.id} className="activity-row">
-            <div className="activity-symbol" style={{ background: `${symbolColors[e.status] || '#4aae93'}20`, color: symbolColors[e.status] || '#4aae93' }}>
+            <div className="activity-symbol" style={{ background: `${symbolColors[e.status] || '#059669'}20`, color: symbolColors[e.status] || '#059669' }}>
               <ClipboardList size={13} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>

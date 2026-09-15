@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, AlertTriangle, ClipboardList, CheckCircle, Clock, ChevronRight, ArrowRight } from 'lucide-react';
+import { Plus, AlertTriangle, ClipboardList, CheckCircle, ChevronRight, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useAuth } from '../../store/authStore';
@@ -11,9 +11,10 @@ import { KpiCard } from './KpiCard';
 import { WatchList } from './WatchList';
 import { StatusDistribution } from './StatusDistribution';
 import { PriorityDistribution } from './PriorityDistribution';
-import { RecentActivity } from './RecentActivity';
+import { CategoryDistribution } from './CategoryDistribution';
+import { TrendChart } from './TrendChart';
 import { Drawer } from '../drawer/IncidentDrawer';
-import { timeAgo, useTimeAgo } from '../../lib/utils';
+import { useTimeAgo } from '../../lib/utils';
 import { categoryPriorityClass } from '../../constants';
 
 function getGreeting(t: (k: string) => string) {
@@ -23,9 +24,16 @@ function getGreeting(t: (k: string) => string) {
   return t('dashboard.greeting.evening');
 }
 
+function getDateLabel() {
+  const d = new Date();
+  const days = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+  const months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;
+}
+
+/** Top-level dashboard router */
 export function Dashboard() {
   const u = useAuth((s) => s.user)!;
-  const nav = useNavigate();
   const admin = u.roles.includes('ADMINISTRATOR');
   const responsable = u.roles.includes('RESPONSABLE');
 
@@ -59,7 +67,7 @@ function UserDashboard() {
       <div className="page-heading dashboard-heading">
         <div>
           <div className="eyebrow">
-            <span className="eyebrow-dot" /> {t('dashboard.eyebrow')}
+            <span className="eyebrow-dot" /> {getDateLabel()}
           </div>
           <h1>{greeting}, {u.name.split(' ')[0]} <span className="wave">&#10022;</span></h1>
           <p>{t('dashboard.userSubtitle')}</p>
@@ -87,20 +95,9 @@ function UserDashboard() {
           <KpiCard label={t('dashboard.kpi.myReports')} value={incidents.length} variant="teal" subtitle={t('dashboard.kpi.totalReports')} />
           <KpiCard label={t('dashboard.kpi.inProgress')} value={incidents.filter((i) => i.status === 'IN_PROGRESS').length} variant="orange" subtitle={t('dashboard.kpi.inProgressSub')} />
           <KpiCard label={t('dashboard.kpi.pending')} value={incidents.filter((i) => i.status === 'NEW' || i.status === 'ASSIGNED').length} variant="coral" subtitle={t('dashboard.kpi.pendingSub')} />
-          <KpiCard label={t('dashboard.kpi.resolved')} value={incidents.filter((i) => i.status === 'RESOLVED' || i.status === 'CLOSED').length} variant="purple" subtitle={t('dashboard.kpi.resolvedRate')}
+          <KpiCard label={t('dashboard.kpi.resolved')} value={incidents.filter((i) => i.status === 'RESOLVED' || i.status === 'CLOSED').length} variant="green" subtitle={t('dashboard.kpi.resolvedRate')}
             trend={incidents.length > 0 ? Math.round((incidents.filter((i) => i.status === 'RESOLVED' || i.status === 'CLOSED').length / incidents.length) * 100) : 0}
           />
-        </div>
-      )}
-
-      {!loading && !error && incidents.length === 0 && (
-        <div className="empty-state">
-          <ClipboardList size={40} className="empty-icon" />
-          <div className="empty-title">{t('dashboard.empty.noIncidents')}</div>
-          <div className="empty-desc">{t('dashboard.empty.noIncidentsDesc')}</div>
-          <button className="button button-primary" onClick={() => nav('/incidents?new=1')}>
-            <Plus size={16} /> {t('dashboard.reportIncident')}
-          </button>
         </div>
       )}
 
@@ -150,7 +147,7 @@ function ResponsableDashboard() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, []);
 
   const toAccept = incidents.filter((i) => i.status === 'ASSIGNED');
   const inProgress = incidents.filter((i) => i.status === 'IN_PROGRESS');
@@ -163,7 +160,7 @@ function ResponsableDashboard() {
       <div className="page-heading dashboard-heading">
         <div>
           <div className="eyebrow">
-            <span className="eyebrow-dot" /> {t('dashboard.eyebrow')}
+            <span className="eyebrow-dot" /> {getDateLabel()}
           </div>
           <h1>{greeting}, {u.name.split(' ')[0]} <span className="wave">&#10022;</span></h1>
           <p>
@@ -192,13 +189,13 @@ function ResponsableDashboard() {
           <KpiCard label={t('dashboard.kpi.myAssignments')} value={incidents.length} variant="teal" subtitle={t('dashboard.kpi.totalAssigned')} />
           <KpiCard label={t('dashboard.kpi.inProgress')} value={inProgress.length} variant="orange" subtitle={t('dashboard.kpi.inProgressSub')} />
           <KpiCard label={t('dashboard.kpi.toAccept')} value={toAccept.length} variant="coral" subtitle={t('dashboard.kpi.toAcceptSub')} />
-          <KpiCard label={t('dashboard.kpi.resolved')} value={awaitingResolution.length} variant="purple" subtitle={t('dashboard.kpi.awaitingVerification')} />
+          <KpiCard label={t('dashboard.kpi.resolved')} value={awaitingResolution.length} variant="green" subtitle={t('dashboard.kpi.awaitingVerification')} />
         </div>
       )}
 
       {!loading && !error && totalActions === 0 && inProgress.length === 0 && (
         <div className="empty-state">
-          <CheckCircle size={40} className="empty-icon" style={{ color: 'var(--teal)' }} />
+          <CheckCircle size={40} className="empty-icon" style={{ color: 'var(--blue)' }} />
           <div className="empty-title">{t('dashboard.empty.upToDate')}</div>
           <div className="empty-desc">{t('dashboard.empty.upToDateDesc')}</div>
         </div>
@@ -279,11 +276,13 @@ function ResponsableDashboard() {
 }
 
 function AdminDashboard() {
+  const u = useAuth((s) => s.user)!;
   const [d, setD] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [unassigned, setUnassigned] = useState<any[]>([]);
   const [toReview, setToReview] = useState<any[]>([]);
+  const [allIncidents, setAllIncidents] = useState<any[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const nav = useNavigate();
   const t = useI18n((s) => s.t);
@@ -293,11 +292,13 @@ function AdminDashboard() {
     Promise.all([
       api<any>('/dashboard'),
       api<any>('/incidents?status=NEW&limit=10'),
-      api<any>('/incidents?status=RESOLVED&limit=10')
-    ]).then(([dash, un, rev]) => {
+      api<any>('/incidents?status=RESOLVED&limit=10'),
+      api<any>('/incidents?limit=20')
+    ]).then(([dash, un, rev, all]) => {
       setD(dash);
       setUnassigned(un.items || []);
       setToReview(rev.items || []);
+      setAllIncidents(all.items || []);
     }).catch((err) => setError(err.message || t('common.error')))
       .finally(() => setLoading(false));
   }, [t]);
@@ -321,107 +322,133 @@ function AdminDashboard() {
     );
   }
 
+  const attentionItems = [
+    ...unassigned.slice(0, 1).map((i: any) => ({ ...i, _action: 'assign', _actionLabel: 'Assign >' })),
+    ...toReview.slice(0, 1).map((i: any) => ({ ...i, _action: 'review', _actionLabel: 'Review >' }))
+  ];
+
   return (
     <div className="page">
       <div className="page-heading dashboard-heading">
         <div>
           <div className="eyebrow">
-            <span className="eyebrow-dot" /> {t('dashboard.eyebrow')}
+            <span className="eyebrow-dot" /> {getDateLabel()}
           </div>
-          <h1>{greeting} <span className="wave">&#10022;</span></h1>
+          <h1>{greeting}, {u.name.split(' ')[0]}</h1>
           <p>{t('dashboard.adminSubtitle')}</p>
         </div>
-        <button className="button button-primary" onClick={() => nav('/incidents?new=1')}>
-          <Plus size={17} /> {t('dashboard.newIncident')}
+        <button className="button button-primary button-lg" onClick={() => nav('/incidents?new=1')}>
+          <Plus size={18} /> {t('dashboard.reportIncident')}
         </button>
       </div>
 
       <div className="kpi-grid">
         <KpiCard label={t('dashboard.kpi.activeIncidents')} value={d.active ?? 0} variant="teal" subtitle={t('dashboard.kpi.activeSub')} />
-        <KpiCard label={t('dashboard.kpi.inProgress')} value={d.inProgress ?? 0} variant="orange" subtitle={t('dashboard.kpi.inProgressSub')} />
-        <KpiCard label={t('dashboard.kpi.pending')} value={unassigned.length} variant="coral" subtitle={t('dashboard.kpi.pendingSub')} />
-        <KpiCard label={t('dashboard.kpi.resolved')} value={d.resolved ?? 0} variant="purple" subtitle={t('dashboard.kpi.resolvedRate')} trend={d.total > 0 ? Math.round(((d.resolved ?? 0) / d.total) * 100) : 0} />
+        <KpiCard label={t('dashboard.kpi.critical')} value={d.critical ?? 0} variant="coral" subtitle={t('dashboard.kpi.criticalSub')} />
+        <KpiCard label={t('dashboard.kpi.pending')} value={unassigned.length} variant="orange" subtitle={t('dashboard.kpi.pendingSub')} />
+        <KpiCard label={t('dashboard.kpi.toReview')} value={d.toReview ?? 0} variant="green" subtitle={t('dashboard.kpi.toReviewSub')} />
       </div>
 
-      {(unassigned.length > 0 || toReview.length > 0) && (
-        <div className="dashboard-grid-top">
-          {unassigned.length > 0 && (
-            <div className="panel">
-              <div className="panel-header">
-                <h2><span className="status-dot fill-orange" /> {t('dashboard.sections.unassigned')}</h2>
-                <p>{unassigned.length} {t('dashboard.sections.unassignedCount')}</p>
+      {attentionItems.length > 0 && (
+        <div className="needs-attention-section">
+          <div className="needs-attention-header">
+            <h2>Needs attention</h2>
+            <a href="#" onClick={(e) => { e.preventDefault(); nav('/incidents'); }}>View all <ArrowRight size={14} /></a>
+          </div>
+          <div className="needs-attention-sub">Incidents requiring an assignment or decision.</div>
+          <div className="needs-attention-scroll">
+            {attentionItems.map((i) => (
+              <div
+                key={i.id}
+                className={`attention-card ${i._action === 'assign' ? 'attention-card-critical' : 'attention-card-review'}`}
+                onClick={() => setSelected(i.id)}
+              >
+                <div className={`attention-icon ${i._action === 'assign' ? 'attention-icon-critical' : 'attention-icon-review'}`}>
+                  <AlertTriangle size={18} />
+                </div>
+                <div className="attention-body">
+                  <div className="attention-meta">
+                    <span className={i._action === 'assign' ? 'attention-badge-critical' : 'attention-badge-review'}>
+                      {i._action === 'assign' ? 'Critical' : 'Review'}
+                    </span>
+                    <span className="attention-time">{timeAgoFn(i.createdAt).toUpperCase()}</span>
+                  </div>
+                  <div className="attention-title">{i.title}</div>
+                  <div className="attention-site">{i.site?.name}</div>
+                </div>
+                <span className="attention-action">{i._actionLabel}</span>
               </div>
-              <div className="user-incidents-list">
-                {unassigned.slice(0, 5).map((i) => (
-                  <button key={i.id} className="incident-compact incident-compact-action" onClick={() => setSelected(i.id)}>
-                    <PriorityBadge value={i.priority} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="incident-compact-title">{i.title}</div>
-                      <div className="incident-compact-meta">{i.site?.name} &middot; {timeAgoFn(i.createdAt)}</div>
-                    </div>
-                    <span className="button button-sm button-outline">{t('dashboard.actions.assign')}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {toReview.length > 0 && (
-            <div className="panel">
-              <div className="panel-header">
-                <h2><span className="status-dot fill-blue" /> {t('dashboard.sections.toReview')}</h2>
-                <p>{toReview.length} {t('dashboard.sections.toReviewCount')}</p>
-              </div>
-              <div className="user-incidents-list">
-                {toReview.slice(0, 5).map((i) => (
-                  <button key={i.id} className="incident-compact" onClick={() => setSelected(i.id)}>
-                    <PriorityBadge value={i.priority} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="incident-compact-title">{i.title}</div>
-                      <div className="incident-compact-meta">{i.site?.name} &middot; {timeAgoFn(i.updatedAt)}</div>
-                    </div>
-                    <StatusBadge value={i.status} />
-                    <ChevronRight size={16} className="incident-compact-chevron" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
 
-      <div className="dashboard-grid-bottom">
-        <div className="panel">
-          <div className="panel-header">
-            <h2>{t('dashboard.sections.watchlist')}</h2>
-            <p>{t('dashboard.sections.watchlistSub')}</p>
+      {allIncidents.length > 0 && (
+        <div className="recent-incidents-section">
+          <div className="recent-incidents-header">
+            <h2>Recent incidents</h2>
+            <a href="#" onClick={(e) => { e.preventDefault(); nav('/incidents'); }}>Open incident register <ArrowRight size={14} /></a>
           </div>
-          <WatchList />
-        </div>
-        <div className="panel">
-          <div className="panel-header">
-            <h2>{t('dashboard.sections.statusDistribution')}</h2>
-            <p>{t('dashboard.sections.statusDistSub')}</p>
+          <div className="recent-incidents-sub">Live operational activity across your sites.</div>
+          <div className="incidents-table-panel">
+            <div className="incidents-table-toolbar">
+              <div className="incidents-search">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input placeholder="Search ID, incident or site" readOnly />
+              </div>
+              <select className="incidents-filter-select">
+                <option>All statuses</option>
+              </select>
+              <select className="incidents-filter-select">
+                <option>All priorities</option>
+              </select>
+            </div>
+            <div className="incidents-table-head">
+              <span>INCIDENT</span>
+              <span>LOCATION</span>
+              <span>STATUS</span>
+              <span>PRIORITY</span>
+              <span>OWNER</span>
+              <span>UPDATED</span>
+              <span />
+            </div>
+            {allIncidents.slice(0, 8).map((i: any) => {
+              const ownerName = i.assignments?.find((a: any) => a.isActive)?.responsable?.user?.name;
+              const ownerInitials = ownerName ? ownerName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() : null;
+              const avatarColors = ['owner-avatar-green', 'owner-avatar-blue', 'owner-avatar-purple', 'owner-avatar-orange', 'owner-avatar-rose'];
+              const avatarColor = avatarColors[Math.abs(i.id.charCodeAt(0)) % avatarColors.length];
+              return (
+                <div key={i.id} className="incidents-table-row" onClick={() => setSelected(i.id)}>
+                  <div>
+                    <div className="incident-cell-title">{i.title}</div>
+                    <div className="incident-cell-meta">{i.id.slice(0, 8).toUpperCase()} · {i.category}</div>
+                  </div>
+                  <div>
+                    <div className="incident-cell-site">{i.site?.name}</div>
+                  </div>
+                  <div><StatusBadge value={i.status} /></div>
+                  <div><PriorityBadge value={i.priority} /></div>
+                  <div>
+                    {ownerName ? (
+                      <div className="owner-cell">
+                        <div className={`owner-avatar ${avatarColor}`}>{ownerInitials}</div>
+                        <span className="owner-name">{ownerName}</span>
+                      </div>
+                    ) : (
+                      <div className="owner-cell">
+                        <div className="owner-avatar owner-avatar-green" style={{ background: '#f1f5f9', color: '#94a3b8' }}>—</div>
+                        <span className="owner-unassigned">Unassigned</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="incident-cell-time">{timeAgoFn(i.updatedAt)}</div>
+                  <div><ChevronRight size={16} color="#b3bfc1" /></div>
+                </div>
+              );
+            })}
           </div>
-          <StatusDistribution data={d.statuses || []} />
         </div>
-      </div>
-
-      <div className="dashboard-grid-bottom">
-        <div className="panel">
-          <div className="panel-header">
-            <h2>{t('dashboard.sections.recentActivity')}</h2>
-            <p>{t('dashboard.sections.recentActivitySub')}</p>
-          </div>
-          <RecentActivity />
-        </div>
-        <div className="panel">
-          <div className="panel-header">
-            <h2>{t('dashboard.sections.priorities')}</h2>
-            <p>{t('dashboard.sections.prioritiesSub')}</p>
-          </div>
-          <PriorityDistribution data={d.priorities || []} />
-        </div>
-      </div>
+      )}
 
       {selected && <Drawer id={selected} onClose={() => setSelected(null)} />}
     </div>

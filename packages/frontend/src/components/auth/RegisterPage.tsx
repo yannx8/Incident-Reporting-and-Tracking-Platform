@@ -18,13 +18,9 @@ export function RegisterPage() {
   const [orgSlug, setOrgSlug] = useState('');
   const [organizations, setOrganizations] = useState<Org[]>([]);
   const [orgsLoading, setOrgsLoading] = useState(true);
-  const { register, isLoading, error, clearError, pendingVerification } = useAuthStore();
+  const { register, isLoading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
   const t = useI18n((s) => s.t);
-
-  useEffect(() => {
-    if (pendingVerification) navigate('/verify');
-  }, [pendingVerification, navigate]);
 
   useEffect(() => {
     fetch('/api/organizations')
@@ -39,7 +35,10 @@ export function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try { await register(name, email, password, orgSlug); } catch {}
+    try {
+      await register(name, email, password, orgSlug);
+      navigate('/');
+    } catch {}
   };
 
   return (

@@ -1,3 +1,4 @@
+// Mirror of the backend enums; kept in sync manually until codegen is added
 export type Role = 'USER' | 'RESPONSABLE' | 'ADMINISTRATOR';
 export type UserRole = Role;
 export type IncidentStatus = 'NEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
@@ -27,6 +28,8 @@ export interface Site {
   _count?: { incidents?: number };
 }
 
+// Core incident shape returned by GET /incidents/:id; nested relations
+// (site, reporter, assignments, etc.) are included to avoid extra fetches
 export interface Incident {
   id: string;
   title: string;

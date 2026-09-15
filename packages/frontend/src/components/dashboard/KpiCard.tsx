@@ -1,12 +1,13 @@
 import { ClipboardList, Clock, AlertTriangle, CheckCircle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
-type KpiVariant = 'teal' | 'orange' | 'coral' | 'purple';
+type KpiVariant = 'teal' | 'orange' | 'coral' | 'purple' | 'green';
 
 const VARIANT_CONFIG: Record<KpiVariant, { bg: string; icon: string; Icon: any }> = {
-  teal: { bg: '#e8f2ef', icon: '#2d8a5e', Icon: ClipboardList },
-  orange: { bg: '#fbefe3', icon: '#bf7840', Icon: Clock },
-  coral: { bg: '#f9e9eb', icon: '#ae5c68', Icon: AlertTriangle },
-  purple: { bg: '#eeeaf7', icon: '#7c6aa3', Icon: CheckCircle }
+  teal: { bg: '#eff6ff', icon: '#2563eb', Icon: ClipboardList },
+  orange: { bg: '#ffedd5', icon: '#ea580c', Icon: Clock },
+  coral: { bg: '#fee2e2', icon: '#dc2626', Icon: AlertTriangle },
+  purple: { bg: '#f5f3ff', icon: '#7c3aed', Icon: CheckCircle },
+  green: { bg: '#d1fae5', icon: '#059669', Icon: CheckCircle }
 };
 
 interface KpiCardProps {
@@ -18,6 +19,10 @@ interface KpiCardProps {
   loading?: boolean;
 }
 
+/**
+ * Displays a single KPI metric with label, value, optional trend indicator,
+ * and a color-coded icon derived from the variant.
+ */
 export function KpiCard({ label, value, variant, subtitle, trend, loading }: KpiCardProps) {
   if (loading) {
     return (
@@ -38,19 +43,21 @@ export function KpiCard({ label, value, variant, subtitle, trend, loading }: Kpi
   return (
     <div className="kpi-card">
       <div className="kpi-header">
-        <span className="kpi-label">{label}</span>
         <div className="kpi-icon" style={{ background: config.bg, color: config.icon }}>
-          <Icon size={17} strokeWidth={1.8} />
+          <Icon size={18} strokeWidth={1.8} />
+        </div>
+        <div className="kpi-copy">
+          <span className="kpi-label">{label}</span>
+          <div className="kpi-value">{String(value).padStart(2, '0')}</div>
+          {subtitle && <div className="kpi-footer">{subtitle}</div>}
+          {trend !== undefined && trend !== 0 && (
+            <div className={`kpi-trend ${trend > 0 ? 'kpi-trend-up' : 'kpi-trend-down'}`}>
+              {trend > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+              {Math.abs(trend)}%
+            </div>
+          )}
         </div>
       </div>
-      <div className="kpi-value">{String(value).padStart(2, '0')}</div>
-      {subtitle && <div className="kpi-footer">{subtitle}</div>}
-      {trend !== undefined && trend !== 0 && (
-        <div className={`kpi-trend ${trend > 0 ? 'kpi-trend-up' : 'kpi-trend-down'}`}>
-          {trend > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-          {Math.abs(trend)}%
-        </div>
-      )}
     </div>
   );
 }

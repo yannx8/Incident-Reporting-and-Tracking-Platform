@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import { useI18n } from './i18n';
 import { Spinner } from './components/shared/Spinner';
-import { LoginPage, RegisterPage, VerifyPage } from './components/auth';
+import { LoginPage, RegisterPage } from './components/auth';
 import { AppShell } from './components/layout';
 import { Dashboard } from './components/dashboard';
 import { Incidents } from './components/incidents';
@@ -26,6 +27,11 @@ function OperationalRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { user, isInitialized } = useAuthStore();
+  const locale = useI18n((s) => s.locale);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   if (!isInitialized) {
     return (
@@ -39,7 +45,6 @@ export default function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to="/" /> : <RegisterPage />} />
-      <Route path="/verify" element={<VerifyPage />} />
       <Route
         path="/*"
         element={
