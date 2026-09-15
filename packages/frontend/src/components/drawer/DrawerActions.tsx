@@ -39,6 +39,7 @@ interface DrawerActionsProps {
   progressNote: string;
   setProgressNote: (v: string) => void;
   canProgress: boolean;
+  canAssign?: boolean;
 }
 
 export function DrawerActions({
@@ -47,7 +48,8 @@ export function DrawerActions({
   showReassign, setShowReassign, reassignReason, setReassignReason,
   showReject, setShowReject, rejectReason, setRejectReason,
   showResolve, setShowResolve, resolveText, setResolveText,
-  showProgress, setShowProgress, progressNote, setProgressNote, canProgress
+  showProgress, setShowProgress, progressNote, setProgressNote, canProgress,
+  canAssign = true
 }: DrawerActionsProps) {
   const t = useI18n((s) => s.t);
 
@@ -60,7 +62,7 @@ export function DrawerActions({
         </div>
       )}
 
-      {incident.status === 'NEW' && (
+      {canAssign && incident.status === 'NEW' && (
         <div className="drawer-actions-row">
           <button className="button button-primary drawer-action" onClick={() => setShowReassign(!showReassign)} disabled={actionLoading}>
             {t('drawer.assignResponsable')}
@@ -98,7 +100,7 @@ export function DrawerActions({
         </div>
       )}
 
-      {showReassign && incident.status === 'NEW' && (
+      {canAssign && showReassign && incident.status === 'NEW' && (
         <div className="reassign-section" style={{ marginTop: 12 }}>
           <div className="reassign-title">{t('drawer.assignResponsable')}</div>
           <select style={{ width: '100%', padding: '8px 10px', border: '1px solid #e0d0b8', borderRadius: 6, fontSize: 11, marginBottom: 8 }}

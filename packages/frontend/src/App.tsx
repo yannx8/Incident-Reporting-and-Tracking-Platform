@@ -42,6 +42,7 @@ export default function App() {
   }
 
   return (
+    <>
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to="/" /> : <RegisterPage />} />
@@ -67,5 +68,6 @@ export default function App() {
         }
       />
     </Routes>
+    </>
   );
 }

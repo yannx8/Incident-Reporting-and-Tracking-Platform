@@ -41,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const responsable = roles.includes('RESPONSABLE');
   const canSeeMap = admin || responsable;
   const roleLabel: Record<string, string> = { ADMINISTRATOR: 'Admin', RESPONSABLE: 'Responsable', USER: 'User' };
-  const initials = u.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+  const initials = u.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
 
   const viewTitle = useMemo(() => {
     const map: Record<string, string> = {
@@ -103,6 +103,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="sidebar-bottom">
           <NavItem to="/settings" icon={<Settings />} text={t('nav.settings')} active={loc.pathname === '/settings'} />
+          <button className="sidebar-logout" onClick={handleLogout}>
+            <LogOut size={14} />
+            {t('nav.logout')}
+          </button>
           <button className="user-mini" onClick={() => { closeSidebar(); nav('/profile'); }}>
             <div className="avatar-green">{initials}</div>
             <div className="user-mini-info">
@@ -110,10 +114,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="user-mini-role">{roleLabel[roles[0]] || roles[0]}</span>
             </div>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#64748B', flexShrink: 0 }}><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-          </button>
-          <button className="sidebar-logout" onClick={handleLogout}>
-            <LogOut size={14} />
-            {t('nav.logout')}
           </button>
         </div>
       </aside>

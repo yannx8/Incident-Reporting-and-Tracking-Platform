@@ -1,21 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, Send } from 'lucide-react';
 import { api } from '../../api/client';
-
 import { useAuth } from '../../store/authStore';
 import { useI18n } from '../../i18n';
-import { timeAgo, useFormatDateTime } from '../../lib/utils';
-import { CATEGORY_LABELS, timelineDotClass, statusLabels } from '../../constants';
-import { StatusBadge } from '../shared/StatusBadge';
-import { PriorityBadge } from '../shared/PriorityBadge';
+import { timeAgo } from '../../lib/utils';
+import { CATEGORY_LABELS, timelineDotClass } from '../../constants';
 import { Spinner } from '../shared/Spinner';
-import { Toast } from '../shared/Toast';
-import { DrawerActions } from './DrawerActions';
-import { DrawerComments } from './DrawerComments';
-import { DrawerAttachments } from './DrawerAttachments';
-import { DrawerMiniMap } from './DrawerMiniMap';
-
-const STATUS_ORDER = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
 
 function getDrawerBadgeClass(status: string): string {
   const map: Record<string, string> = {
@@ -23,7 +13,7 @@ function getDrawerBadgeClass(status: string): string {
     ASSIGNED: 'drawer-badge-assigned',
     IN_PROGRESS: 'drawer-badge-progress',
     RESOLVED: 'drawer-badge-resolved',
-    CLOSED: 'drawer-badge-closed'
+    CLOSED: 'drawer-badge-closed',
   };
   return map[status] || 'drawer-badge-new';
 }
@@ -31,39 +21,49 @@ function getDrawerBadgeClass(status: string): string {
 function getDrawerPriorityClass(priority: string): string {
   const map: Record<string, string> = {
     CRITICAL: 'drawer-badge-critical',
-    HIGH: 'drawer-badge-critical',
-    MEDIUM: 'drawer-badge-new',
-    LOW: 'drawer-badge-progress'
+    HIGH: 'drawer-badge-high',
+    MEDIUM: 'drawer-badge-medium',
+    LOW: 'drawer-badge-low',
   };
   return map[priority] || 'drawer-badge-new';
 }
 
-/** Side panel for viewing incident details, performing actions, and tracking history. */
+function formatEventType(type: string, t: (key: string) => string): string {
+  const map: Record<string, string> = {
+    CREATED: t('eventTypes.INCIDENT_CREATED'),
+    TRIAGE: t('eventTypes.TRIAGE'),
+    VERIFIED: t('eventTypes.VERIFIED'),
+    ASSIGNMENT: t('eventTypes.INCIDENT_ASSIGNED'),
+    ACCEPTANCE: t('eventTypes.INCIDENT_ACCEPTED'),
+    STATUS: t('eventTypes.STATUS_CHANGED'),
+    RESOLUTION: t('eventTypes.RESOLUTION_SUBMITTED'),
+    REJECTED: t('eventTypes.RESOLUTION_REJECTED'),
+    CLOSED: t('eventTypes.INCIDENT_CLOSED'),
+    PROGRESS: t('eventTypes.PROGRESS_ADDED'),
+    COMMENT: t('eventTypes.COMMENT_ADDED'),
+    ATTACHMENT: t('eventTypes.ATTACHMENT_ADDED'),
+    REASSIGNMENT: t('eventTypes.REASSIGNMENT_REQUESTED'),
+  };
+  return map[type] || type.replace(/_/g, ' ').toLowerCase();
+}
+
 export function Drawer({ id, onClose }: { id: string; onClose: () => void }) {
   const [incident, setIncident] = useState<any>(null);
   const [error, setError] = useState('');
   const u = useAuth((s) => s.user)!;
   const t = useI18n((s) => s.t);
-  const formatDateTime = useFormatDateTime();
   const [responsables, setResponsables] = useState<any[]>([]);
-  const [comment, setComment] = useState('');
-  const [showReassign, setShowReassign] = useState(false);
-  const [reassignReason, setReassignReason] = useState('');
-  const [showReject, setShowReject] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [showResolve, setShowResolve] = useState(false);
-  const [resolveText, setResolveText] = useState('');
-  const [showProgress, setShowProgress] = useState<string | null>(null);
-  const [progressNote, setProgressNote] = useState('');
-  const [toast, setToast] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [comment, setComment] = useState('');
+  const [showAssign, setShowAssign] = useState(false);
+  const [selectedResp, setSelectedResp] = useState('');
 
   const load = useCallback(() => {
     setError('');
     api<any>('/incidents/' + id)
       .then(setIncident)
       .catch((err) => setError(err.message || t('drawer.error')));
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -78,12 +78,73 @@ export function Drawer({ id, onClose }: { id: string; onClose: () => void }) {
   }, []);
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
   }, [onClose]);
+
+  const withActionLoading = async (fn: () => Promise<void>) => {
+    setActionLoading(true);
+    try { await fn(); } finally { setActionLoading(false); }
+  };
+
+  const handleAssign = async () => {
+    if (!selectedResp) return;
+    await withActionLoading(async () => {
+      await api('/incidents/' + id + '/assign', {
+        method: 'POST',
+        body: JSON.stringify({ responsableProfileId: selectedResp, expectedVersion: incident.version }),
+      });
+      setShowAssign(false);
+      setSelectedResp('');
+      load();
+    });
+  };
+
+  const handleAccept = async () => {
+    const a = incident.assignments?.find((x: any) => x.isActive);
+    if (!a) return;
+    await withActionLoading(async () => {
+      await api('/assignments/' + a.id + '/accept', {
+        method: 'POST',
+        body: JSON.stringify({ expectedVersion: incident.version }),
+      });
+      load();
+    });
+  };
+
+  const handleResolve = async () => {
+    await withActionLoading(async () => {
+      await api('/incidents/' + id + '/resolution', {
+        method: 'POST',
+        body: JSON.stringify({ resolutionText: 'Resolved by ' + u.name, expectedVersion: incident.version }),
+      });
+      load();
+    });
+  };
+
+  const handleCloseIncident = async () => {
+    await withActionLoading(async () => {
+      await api('/incidents/' + id + '/closure', {
+        method: 'POST',
+        body: JSON.stringify({ expectedVersion: incident.version }),
+      });
+      load();
+    });
+  };
+
+  const handleComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (comment.trim().length < 1) return;
+    await withActionLoading(async () => {
+      await api('/incidents/' + id + '/comments', {
+        method: 'POST',
+        body: JSON.stringify({ body: comment.trim() }),
+      });
+      setComment('');
+      load();
+    });
+  };
 
   if (error && !incident) {
     return (
@@ -91,15 +152,14 @@ export function Drawer({ id, onClose }: { id: string; onClose: () => void }) {
         <div className="drawer-backdrop" onClick={onClose} />
         <div className="incident-drawer">
           <div className="drawer-header">
-          <button className="drawer-close" onClick={onClose} aria-label={t('common.close')}>
-              <X size={18} />
-            </button>
+            <div />
+            <button className="drawer-close" onClick={onClose} aria-label={t('common.close')}><X size={18} /></button>
           </div>
           <div className="empty-state">
             <AlertTriangle size={32} className="empty-icon" />
             <div className="empty-title">{t('drawer.error')}</div>
             <div className="empty-desc">{error}</div>
-            <button className="button button-outline" onClick={load}>{t('drawer.retry')}</button>
+            <button className="button button-outline" onClick={load}>{t('common.retry')}</button>
           </div>
         </div>
       </>
@@ -118,153 +178,42 @@ export function Drawer({ id, onClose }: { id: string; onClose: () => void }) {
   }
 
   const assignment = incident.assignments?.find((a: any) => a.isActive);
-  const currentStep = STATUS_ORDER.indexOf(incident.status);
+  const ownerName = assignment?.responsable?.user?.name;
+  const ownerInitials = ownerName
+    ? ownerName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+    : '\u2013';
+  const issueCode = incident.incNumber || ('INC-' + String(id).slice(0, 4).toUpperCase());
+  const exactLocation = incident.exactLocation || incident.site?.address || (incident.latitude != null ? `${Number(incident.latitude).toFixed(4)}, ${Number(incident.longitude).toFixed(4)}` : '\u2014');
 
-  const withActionLoading = async (fn: () => Promise<void>) => {
-    setActionLoading(true);
-    try { await fn(); } finally { setActionLoading(false); }
-  };
-
-  const handleAssign = async (respId: string) => {
-    await withActionLoading(async () => {
-      await api('/incidents/' + id + '/assign', {
-        method: 'POST',
-        body: JSON.stringify({ responsableProfileId: respId, expectedVersion: incident.version })
-      });
-      setShowReassign(false);
-      setToast(t('toasts.responsableAssigned'));
-      load();
-    });
-  };
-
-  const handleAccept = async () => {
-    await withActionLoading(async () => {
-      await api('/assignments/' + assignment.id + '/accept', {
-        method: 'POST',
-        body: JSON.stringify({ expectedVersion: incident.version })
-      });
-      setToast(t('toasts.assignmentAccepted'));
-      load();
-    });
-  };
-
-  const handleResolve = async () => {
-    if (resolveText.trim().length < 10 || resolveText.trim().length > 3000) return;
-    await withActionLoading(async () => {
-      await api('/incidents/' + id + '/resolution', {
-        method: 'POST',
-        body: JSON.stringify({ resolutionText: resolveText.trim(), expectedVersion: incident.version })
-      });
-      setShowResolve(false);
-      setResolveText('');
-      setToast(t('toasts.resolutionSubmitted'));
-      load();
-    });
-  };
-
-  const handleClose = async () => {
-    await withActionLoading(async () => {
-      await api('/incidents/' + id + '/closure', {
-        method: 'POST',
-        body: JSON.stringify({ expectedVersion: incident.version })
-      });
-      setToast(t('toasts.incidentClosed'));
-      load();
-    });
-  };
-
-  const handleReject = async () => {
-    if (rejectReason.trim().length < 5 || rejectReason.trim().length > 500) return;
-    await withActionLoading(async () => {
-      await api('/incidents/' + id + '/reject-resolution', {
-        method: 'POST',
-        body: JSON.stringify({ reason: rejectReason.trim(), expectedVersion: incident.version })
-      });
-      setShowReject(false);
-      setRejectReason('');
-      setToast(t('toasts.resolutionRejected'));
-      load();
-    });
-  };
-
-  const handleReassign = async () => {
-    if (reassignReason.trim().length < 5 || reassignReason.trim().length > 500) return;
-    if (!assignment) return;
-    await withActionLoading(async () => {
-      await api('/assignments/' + assignment.id + '/reassign', {
-        method: 'POST',
-        body: JSON.stringify({ reason: reassignReason.trim() })
-      });
-      setShowReassign(false);
-      setReassignReason('');
-      setToast(t('toasts.reassignmentRequested'));
-      load();
-    });
-  };
-
-  const handleComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (comment.trim().length < 1 || comment.trim().length > 2000) return;
-    await withActionLoading(async () => {
-      await api('/incidents/' + id + '/comments', {
-        method: 'POST',
-        body: JSON.stringify({ body: comment.trim() })
-      });
-      setComment('');
-      setToast(t('toasts.commentAdded'));
-      load();
-    });
-  };
-
-  const handleProgress = async () => {
-    if (!showProgress || progressNote.trim().length < 1 || progressNote.trim().length > 2000) return;
-    await withActionLoading(async () => {
-      await api('/incidents/' + id + '/progress', {
-        method: 'POST',
-        body: JSON.stringify({ type: showProgress, note: progressNote.trim() })
-      });
-      setShowProgress(null);
-      setProgressNote('');
-      setToast(t('toasts.progressPublished'));
-      load();
-    });
-  };
-
-  const canProgress = incident.status === 'IN_PROGRESS' && u.roles.includes('RESPONSABLE');
+  const canAssign = u.roles.includes('ADMINISTRATOR');
 
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
-      <div
-        className="incident-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="incident-drawer-title"
-      >
+      <div className="incident-drawer" role="dialog" aria-modal="true" aria-labelledby="incident-drawer-title">
+
         <div className="drawer-header">
-          <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>{id.slice(0, 8).toUpperCase()}</span>
-          <button className="drawer-close" onClick={onClose}>
+          <div className="drawer-heading">
+            <span>{issueCode}</span>
+            <h2 id="incident-drawer-title">{incident.title}</h2>
+          </div>
+          <button className="drawer-close" onClick={onClose} aria-label={t('common.close')}>
             <X size={18} />
           </button>
         </div>
 
         <div className="drawer-content">
-          <div className="drawer-title">
-            <h2 id="incident-drawer-title">{incident.title}</h2>
-            <div className="drawer-title-badges">
-              <span className={`drawer-badge ${getDrawerPriorityClass(incident.priority)}`}>
-                <i /> {incident.priority}
-              </span>
-              <span className={`drawer-badge ${getDrawerBadgeClass(incident.status)}`}>
-                <i /> {t(`incidentStatuses.${incident.status}`) || incident.status}
-              </span>
-            </div>
+          <div className="drawer-badges">
+            <span className={`drawer-badge ${getDrawerPriorityClass(incident.priority)}`}>
+              {t(`priorities.${incident.priority}`)}
+            </span>
+            <span className={`drawer-badge ${getDrawerBadgeClass(incident.status)}`}>
+              <i /> {t(`incidentStatuses.${incident.status}`)}
+            </span>
           </div>
 
           <div className="drawer-section">
-            <div className="drawer-section-header">
-              <h3>{t('drawer.originalReport')}</h3>
-            </div>
+            <div className="drawer-section-label">{t('drawer.incidentDetails')}</div>
             {incident.description && (
               <div className="drawer-description">
                 <p>{incident.description}</p>
@@ -273,11 +222,11 @@ export function Drawer({ id, onClose }: { id: string; onClose: () => void }) {
             <div className="drawer-info-grid">
               <div className="drawer-info">
                 <div className="drawer-info-label">{t('drawer.site')}</div>
-                <div className="drawer-info-value">{incident.site.name}</div>
+                <div className="drawer-info-value">{incident.site?.name || '\u2014'}</div>
               </div>
               <div className="drawer-info">
                 <div className="drawer-info-label">{t('drawer.exactLocation')}</div>
-                <div className="drawer-info-value">{incident.latitude.toFixed(4)}, {incident.longitude.toFixed(4)}</div>
+                <div className="drawer-info-value">{exactLocation}</div>
               </div>
               <div className="drawer-info">
                 <div className="drawer-info-label">{t('drawer.category')}</div>
@@ -291,26 +240,20 @@ export function Drawer({ id, onClose }: { id: string; onClose: () => void }) {
           </div>
 
           <div className="drawer-section">
-            <div className="drawer-section-header">
-              <h3>{t('drawer.assignedOwner')}</h3>
-            </div>
+            <div className="drawer-section-label">{t('drawer.assignedOwner')}</div>
             <div className="drawer-owner">
-              <div className={`drawer-owner-avatar ${assignment ? '' : 'drawer-owner-avatar-unassigned'}`}>
-                {assignment?.responsable?.user?.name
-                  ? assignment.responsable.user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
-                  : '—'}
+              <div className={`drawer-owner-avatar ${assignment ? 'drawer-owner-avatar-assigned' : 'drawer-owner-avatar-unassigned'}`}>
+                {ownerInitials}
               </div>
               <div className="drawer-owner-info">
-                <div className="drawer-owner-name">{assignment?.responsable?.user?.name || t('drawer.notAssigned')}</div>
+                <div className="drawer-owner-name">{ownerName || t('drawer.notAssigned')}</div>
                 <div className="drawer-owner-hint">{assignment ? t('drawer.assignedTeamMember') : t('drawer.assignTeamMember')}</div>
               </div>
             </div>
           </div>
 
-          <div className="drawer-section">
-            <div className="drawer-section-header">
-              <h3>{t('drawer.activity')}</h3>
-            </div>
+          <div className="drawer-section" style={{ borderBottom: 'none', marginBottom: 0 }}>
+            <div className="drawer-section-label">{t('drawer.activity')}</div>
             <div className="timeline">
               {(incident.auditEvents || []).map((a: any) => (
                 <div key={a.id} className="timeline-event">
@@ -322,80 +265,73 @@ export function Drawer({ id, onClose }: { id: string; onClose: () => void }) {
                   </div>
                 </div>
               ))}
+              {(!incident.auditEvents || incident.auditEvents.length === 0) && (
+                <div style={{ fontSize: 12, color: '#94A3B8', padding: '8px 0' }}>{t('drawer.noActivity')}</div>
+              )}
             </div>
           </div>
 
-          <DrawerActions
-            incident={incident}
-            assignment={assignment}
-            responsables={responsables}
-            actionLoading={actionLoading}
-            onAssign={handleAssign}
-            onAccept={handleAccept}
-            onResolve={handleResolve}
-            onClose={handleClose}
-            onReject={handleReject}
-            onReassign={handleReassign}
-            onProgress={handleProgress}
-            showReassign={showReassign}
-            setShowReassign={setShowReassign}
-            reassignReason={reassignReason}
-            setReassignReason={setReassignReason}
-            showReject={showReject}
-            setShowReject={setShowReject}
-            rejectReason={rejectReason}
-            setRejectReason={setRejectReason}
-            showResolve={showResolve}
-            setShowResolve={setShowResolve}
-            resolveText={resolveText}
-            setResolveText={setResolveText}
-            showProgress={showProgress}
-            setShowProgress={setShowProgress}
-            progressNote={progressNote}
-            setProgressNote={setProgressNote}
-            canProgress={canProgress}
-          />
-
-          <DrawerAttachments incidentId={id} attachments={incident.attachments || []} />
-
-          <DrawerComments
-            comments={incident.comments || []}
-            status={incident.status}
-            comment={comment}
-            setComment={setComment}
-            onSubmit={handleComment}
-            actionLoading={actionLoading}
-          />
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 4 }}>
+            <form onSubmit={handleComment} style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder={t('drawer.addComment') || 'Add a comment...'}
+                style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none' }}
+              />
+              <button type="submit" className="button button-primary button-small" disabled={!comment.trim() || actionLoading}>
+                <Send size={14} />
+              </button>
+            </form>
+          </div>
         </div>
 
         <div className="drawer-footer">
           <button className="button button-outline" onClick={onClose}>{t('common.close')}</button>
-          {incident.status === 'NEW' && (
-            <button className="button button-primary" onClick={() => setShowReassign(true)}>{t('drawer.assignResponsable')}</button>
+
+          {canAssign && incident.status === 'NEW' && !showAssign && (
+            <button className="button button-primary" onClick={() => setShowAssign(true)}>
+              {t('drawer.assignIncident')}
+            </button>
+          )}
+
+          {canAssign && showAssign && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select
+                value={selectedResp}
+                onChange={(e) => setSelectedResp(e.target.value)}
+                style={{ height: 38, border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, padding: '0 10px', background: '#fff', minWidth: 160 }}
+              >
+                <option value="">{t('drawer.chooseResponsable')}</option>
+                {responsables.filter((r: any) => r.isActive).map((r: any) => (
+                  <option key={r.id} value={r.id}>{r.user.name}</option>
+                ))}
+              </select>
+              <button className="button button-primary button-small" onClick={handleAssign} disabled={!selectedResp || actionLoading}>
+                {actionLoading ? <Spinner size={14} /> : <Send size={14} />}
+              </button>
+            </div>
+          )}
+
+          {incident.status === 'ASSIGNED' && assignment && (
+            <button className="button button-primary" onClick={handleAccept} disabled={actionLoading}>
+              {t('drawer.acceptAssignment')}
+            </button>
+          )}
+
+          {incident.status === 'IN_PROGRESS' && (
+            <button className="button button-primary" onClick={handleResolve} disabled={actionLoading}>
+              {t('drawer.submitResolution')}
+            </button>
+          )}
+
+          {incident.status === 'RESOLVED' && (
+            <button className="button button-primary" onClick={handleCloseIncident} disabled={actionLoading}>
+              {t('drawer.closeIncident')}
+            </button>
           )}
         </div>
       </div>
-
-      {toast && <Toast message={toast} onClose={() => setToast('')} />}
     </>
   );
-}
-
-function formatEventType(type: string, t: (key: string) => string): string {
-  const map: Record<string, string> = {
-    CREATED: t('eventTypes.INCIDENT_CREATED'),
-    TRIAGE: t('eventTypes.TRIAGE'),
-    VERIFIED: t('eventTypes.VERIFIED'),
-    ASSIGNMENT: t('eventTypes.INCIDENT_ASSIGNED'),
-    ACCEPTANCE: t('eventTypes.INCIDENT_ACCEPTED'),
-    STATUS: t('eventTypes.STATUS_CHANGED'),
-    RESOLUTION: t('eventTypes.RESOLUTION_SUBMITTED'),
-    REJECTED: t('eventTypes.RESOLUTION_REJECTED'),
-    CLOSED: t('eventTypes.INCIDENT_CLOSED'),
-    PROGRESS: t('eventTypes.PROGRESS_ADDED'),
-    COMMENT: t('eventTypes.COMMENT_ADDED'),
-    ATTACHMENT: t('eventTypes.ATTACHMENT_ADDED'),
-    REASSIGNMENT: t('eventTypes.REASSIGNMENT_REQUESTED')
-  };
-  return map[type] || type.replace(/_/g, ' ').toLowerCase();
 }

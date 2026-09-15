@@ -1,17 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, ChevronRight, ClipboardList, Send, X, CheckCircle, AlertTriangle, Upload } from 'lucide-react';
+import { Plus, Search, ChevronRight, ClipboardList, Send, X, CheckCircle, AlertTriangle, Upload, ArrowRight } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../store/authStore';
 import { Incident, Site } from '../../types';
 import { useI18n } from '../../i18n';
-import { CATEGORY_LABELS } from '../../constants';
+import { CATEGORY_LABELS, PRIORITY_COLORS } from '../../constants';
 import { StatusBadge } from '../shared/StatusBadge';
 import { PriorityBadge } from '../shared/PriorityBadge';
 import { Spinner } from '../shared/Spinner';
 import { Drawer } from '../drawer/IncidentDrawer';
 import { MapLocationPicker } from '../map/MapLocationPicker';
-import { useFormatDate } from '../../lib/utils';
+import { useTimeAgo } from '../../lib/utils';
+
+const AVATAR_COLORS = ['owner-avatar-green', 'owner-avatar-blue', 'owner-avatar-purple', 'owner-avatar-orange', 'owner-avatar-rose'];
+
+function getInitials(name: string): string {
+  return name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+}
 
 export function Incidents() {
   const u = useAuth((s) => s.user)!;
@@ -30,8 +36,9 @@ export function Incidents() {
   const [create, setCreate] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const t = useI18n((s) => s.t);
-  const formatDate = useFormatDate();
+  const timeAgoFn = useTimeAgo();
   const isAdmin = u.roles.includes('ADMINISTRATOR');
+  const items: Incident[] = Array.isArray(data?.items) ? data.items : [];
 
   const load = useCallback(() => {
     setLoading(true);
@@ -69,8 +76,21 @@ export function Incidents() {
       </div>
 
       <div className="panel">
-        <div className="table-toolbar">
-          <div className="table-search">
+        <div className="panel-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <h2>{t('incidents.recentTitle')}</h2>
+            <p>{t('incidents.recentSubtitle')}</p>
+          </div>
+          <button
+            className="button button-ghost button-small"
+            style={{ flexShrink: 0 }}
+            onClick={() => { setQ(''); setStatus(''); setPriority(''); setCategory(''); setSiteFilter(''); setPage(1); load(); }}
+          >
+            {t('incidents.openRegister')} <ArrowRight size={14} />
+          </button>
+        </div>
+        <div className="incidents-table-toolbar">
+          <div className="incidents-search">
             <Search size={15} />
             <input
               placeholder={t('incidents.search')}
@@ -79,32 +99,30 @@ export function Incidents() {
               onKeyDown={(e) => e.key === 'Enter' && load()}
             />
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <select className="filter-select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-              <option value="">{t('incidents.filterStatus')}</option>
-              {['NEW','ASSIGNED','IN_PROGRESS','RESOLVED','CLOSED'].map((k) => (
-                <option key={k} value={k}>{t(`incidentStatuses.${k}` as any)}</option>
-              ))}
+          <select className="incidents-filter-select" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+            <option value="">{t('incidents.filterStatus')}</option>
+            {['NEW','ASSIGNED','IN_PROGRESS','RESOLVED','CLOSED'].map((k) => (
+              <option key={k} value={k}>{t(`incidentStatuses.${k}` as any)}</option>
+            ))}
+          </select>
+          <select className="incidents-filter-select" value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }}>
+            <option value="">{t('incidents.filterPriority')}</option>
+            {['LOW','MEDIUM','HIGH','CRITICAL'].map((k) => (
+              <option key={k} value={k}>{t(`priorities.${k}` as any)}</option>
+            ))}
+          </select>
+          <select className="incidents-filter-select" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
+            <option value="">{t('incidents.filterCategory')}</option>
+            {Object.keys(CATEGORY_LABELS).map((k) => (
+              <option key={k} value={k}>{t(`categories.${k}` as any)}</option>
+            ))}
+          </select>
+          {isAdmin && (
+            <select className="incidents-filter-select" value={siteFilter} onChange={(e) => { setSiteFilter(e.target.value); setPage(1); }}>
+              <option value="">{t('incidents.filterSite')}</option>
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <select className="filter-select" value={priority} onChange={(e) => { setPriority(e.target.value); setPage(1); }}>
-              <option value="">{t('incidents.filterPriority')}</option>
-              {['LOW','MEDIUM','HIGH','CRITICAL'].map((k) => (
-                <option key={k} value={k}>{t(`priorities.${k}` as any)}</option>
-              ))}
-            </select>
-            <select className="filter-select" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
-              <option value="">{t('incidents.filterCategory')}</option>
-              {Object.keys(CATEGORY_LABELS).map((k) => (
-                <option key={k} value={k}>{t(`categories.${k}` as any)}</option>
-              ))}
-            </select>
-            {isAdmin && (
-              <select className="filter-select" value={siteFilter} onChange={(e) => { setSiteFilter(e.target.value); setPage(1); }}>
-                <option value="">{t('incidents.filterSite')}</option>
-                {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            )}
-          </div>
+          )}
         </div>
 
         {loading && (
@@ -120,7 +138,7 @@ export function Incidents() {
           </div>
         )}
 
-        {!loading && !error && data.items.length === 0 && (
+        {!loading && !error && items.length === 0 && (
           <div className="empty-state">
             <ClipboardList size={32} className="empty-icon" />
             <div className="empty-title">{t('incidents.empty')}</div>
@@ -137,30 +155,61 @@ export function Incidents() {
           </div>
         )}
 
-        {!loading && !error && data.items.length > 0 && (
+        {!loading && !error && items.length > 0 && (
           <>
-            <div className="table-head">
+            <div className="incidents-table-head">
               <span>{t('incidents.incident')}</span>
-              <span>{t('incidents.site')}</span>
+              <span>{t('incidents.location')}</span>
               <span>{t('incidents.status')}</span>
               <span>{t('incidents.priority')}</span>
-              <span>{t('incidents.date')}</span>
+              <span>{t('incidents.owner')}</span>
+              <span>{t('incidents.updated')}</span>
               <span />
             </div>
 
-            {data.items.map((i: Incident) => (
-              <div key={i.id} className="table-row" onClick={() => setSelected(i.id)}>
-                <div>
-                  <div className="table-incident-title">{i.title}</div>
-                  <div className="table-incident-meta">{i.id.slice(0, 8).toUpperCase()} &middot; {t(`categories.${i.category}` as any)}</div>
+            {items.map((i: Incident) => {
+              const activeAssignment = (i as any).assignments?.find((a: any) => a.isActive);
+              const ownerName: string | undefined = activeAssignment?.responsable?.user?.name;
+              const avatarColor = AVATAR_COLORS[Math.abs((i.id || '').charCodeAt(0) || 0) % AVATAR_COLORS.length];
+              const accent = PRIORITY_COLORS[i.priority] || '#3B82F6';
+              const categoryLabel = (t(`categories.${i.category}` as any) as string) || i.category;
+              return (
+                <div
+                  key={i.id}
+                  className="incidents-table-row"
+                  style={{ boxShadow: `inset 3px 0 0 ${accent}` }}
+                  onClick={() => setSelected(i.id)}
+                >
+                  <div>
+                    <div className="incident-cell-title">{i.title}</div>
+                    <div className="incident-cell-meta">INC-{(i.id || '').slice(0, 4).toUpperCase()} &middot; {categoryLabel}</div>
+                  </div>
+                  <div>
+                    <div className="incident-cell-site">{i.site?.name || '—'}</div>
+                    {(i.site?.address || (i as any).exactLocation) && (
+                      <div className="incident-cell-site-sub">{i.site?.address || (i as any).exactLocation}</div>
+                    )}
+                  </div>
+                  <div><StatusBadge value={i.status} /></div>
+                  <div><PriorityBadge value={i.priority} /></div>
+                  <div>
+                    {ownerName ? (
+                      <div className="owner-cell">
+                        <div className={`owner-avatar ${avatarColor}`}>{getInitials(ownerName)}</div>
+                        <span className="owner-name">{ownerName}</span>
+                      </div>
+                    ) : (
+                      <div className="owner-cell">
+                        <span style={{ color: '#94A3B8' }}>–</span>
+                        <span className="owner-unassigned">{t('drawer.notAssigned')}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="incident-cell-time">{timeAgoFn(i.updatedAt || i.createdAt)}</div>
+                  <div><ChevronRight size={16} color="#b3bfc1" /></div>
                 </div>
-                <div style={{ fontSize: 11, color: '#5a6e75' }}>{i.site.name}</div>
-                <div><StatusBadge value={i.status} /></div>
-                <div><PriorityBadge value={i.priority} /></div>
-                <div style={{ fontSize: 10, color: '#98a5a8' }}>{formatDate(i.createdAt)}</div>
-                <div><ChevronRight size={14} color="#b3bfc1" /></div>
-              </div>
-            ))}
+              );
+            })}
 
             <div className="table-footer">
               <span>{data.total || 0} {t('incidents.total')}</span>
@@ -175,8 +224,8 @@ export function Incidents() {
                 </select>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <button className="page-btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>&lsaquo;</button>
-                  <span className="page-btn page-btn-active">{page} / {Math.max(1, Math.ceil(data.total / limit))}</span>
-                  <button className="page-btn" disabled={page >= Math.ceil(data.total / limit)} onClick={() => setPage((p) => p + 1)}>&rsaquo;</button>
+                  <span className="page-btn page-btn-active">{page} / {Math.max(1, Math.ceil((data.total || 0) / limit))}</span>
+                  <button className="page-btn" disabled={page >= Math.ceil((data.total || 0) / limit)} onClick={() => setPage((p) => p + 1)}>&rsaquo;</button>
                 </div>
               </div>
             </div>

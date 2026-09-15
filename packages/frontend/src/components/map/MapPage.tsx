@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import L from 'leaflet';
+import { Layers, Navigation, Filter, AlertTriangle, Building2 } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../store/authStore';
 import { useI18n } from '../../i18n';
 import { PRIORITY_COLORS } from '../../constants';
-import { escapeHtml, useFormatDate } from '../../lib/utils';
+import { escapeHtml } from '../../lib/utils';
 import { Spinner } from '../shared/Spinner';
 import { Drawer } from '../drawer/IncidentDrawer';
 
@@ -20,59 +21,86 @@ interface MapIncident {
   siteId: string;
   createdAt: string;
   assignedTo?: string;
-  assignmentStatus?: string;
 }
 
 interface MapSite {
   id: string;
   name: string;
   address?: string | null;
+  city?: string | null;
   latitude: number;
   longitude: number;
   isActive: boolean;
-  _count?: { incidents?: number };
+  radiusMeters?: number;
 }
 
-/**
- * Operational map page. Uses raw Leaflet instead of react-leaflet to avoid
- * react-leaflet's SSR hydration mismatches and to have direct control over
- * marker lifecycle (important when filtering dynamically).
- */
+const PRIORITY_COLORS_MAP: Record<string, string> = {
+  CRITICAL: '#dc2626',
+  HIGH: '#ea580c',
+  MEDIUM: '#d97706',
+  LOW: '#16a34a',
+};
+
+function createIncidentIcon(priority: string): L.DivIcon {
+  const color = PRIORITY_COLORS_MAP[priority] || '#6b7280';
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:28px;height:28px;background:${color};border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  });
+}
+
+function createSiteIcon(): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:28px;height:28px;background:#2563EB;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
+    </div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  });
+}
+
 export function MapPage() {
   const u = useAuth((s) => s.user)!;
   const t = useI18n((s) => s.t);
-  const locale = useI18n((s) => s.locale);
   const isAdmin = u.roles.includes('ADMINISTRATOR');
-  const isResp = u.roles.includes('RESPONSABLE');
 
   const [sites, setSites] = useState<MapSite[]>([]);
   const [incidents, setIncidents] = useState<MapIncident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
-  const [filterPriority, setFilterPriority] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterSite, setFilterSite] = useState('');
-  const [filterAssignment, setFilterAssignment] = useState('');
-  const [search, setSearch] = useState('');
-  const [satellite, setSatellite] = useState(false);
-  const [locating, setLocating] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [priorityFilter, setPriorityFilter] = useState('ALL');
+  const [showIncidents, setShowIncidents] = useState(true);
+  const [showSites, setShowSites] = useState(true);
+  const [mapLayer, setMapLayer] = useState<'standard' | 'satellite'>('standard');
 
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Layer>>(new Map());
+  const circlesRef = useRef<Map<string, L.Circle>>(new Map());
   const tileRef = useRef<L.TileLayer | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError('');
-    api<any>('/map/data').then((mapData) => {
+    Promise.all([
+      api<any>('/map/data'),
+      api<{ items: any[] }>('/incidents?limit=200'),
+    ]).then(([mapData, incData]) => {
       setSites(mapData.sites || []);
-      const raw = (mapData.incidents || []) as MapIncident[];
+      const raw = (incData.items || []) as any[];
       const mapped = raw
-        .filter((i: any) => i.latitude && i.longitude)
-        .map((i: any) => ({
+        .filter((i) => i.latitude && i.longitude)
+        .map((i) => ({
           id: i.id,
           title: i.title,
           latitude: i.latitude,
@@ -83,63 +111,38 @@ export function MapPage() {
           siteName: i.site?.name || '',
           siteId: i.site?.id || '',
           createdAt: i.createdAt,
-          assignedTo: i.assignments?.[0]?.responsableProfile?.user?.name,
-          assignmentStatus: i.assignments?.[0]?.status
+          assignedTo: i.assignments?.[0]?.responsable?.user?.name,
         }));
       setIncidents(mapped);
-      setLoading(false);
-    }).catch((err) => setError(err.message || t('map.loadError')));
+    }).catch((err) => setError(err.message || t('map.loadError')))
+      .finally(() => setLoading(false));
   }, [t]);
 
   const filteredIncidents = useMemo(() => {
     let list = incidents;
-    /* Responders only see incidents assigned to them or new/assigned ones */
-    if (isResp) {
-      list = list.filter((i) => i.assignedTo || i.status === 'NEW' || i.status === 'ASSIGNED');
-    }
-    if (filterPriority) list = list.filter((i) => i.priority === filterPriority);
-    if (filterStatus) list = list.filter((i) => i.status === filterStatus);
-    if (filterSite) list = list.filter((i) => i.siteId === filterSite);
-    if (filterAssignment === 'mine') list = list.filter((i) => i.assignedTo);
-    if (filterAssignment === 'unassigned') list = list.filter((i) => !i.assignedTo);
-    if (search) {
-      const q = search.toLowerCase();
-      list = list.filter((i) => i.title.toLowerCase().includes(q) || i.siteName.toLowerCase().includes(q) || i.id.slice(0, 8).toLowerCase().includes(q));
-    }
+    if (statusFilter !== 'ALL') list = list.filter((i) => i.status === statusFilter);
+    if (priorityFilter !== 'ALL') list = list.filter((i) => i.priority === priorityFilter);
     return list;
-  }, [incidents, filterPriority, filterStatus, filterSite, filterAssignment, search, isResp]);
+  }, [incidents, statusFilter, priorityFilter]);
 
-  const kpis = useMemo(() => {
-    const active = filteredIncidents.filter((i) => i.status !== 'CLOSED');
-    const critical = active.filter((i) => i.priority === 'CRITICAL');
-    const inProg = active.filter((i) => i.status === 'IN_PROGRESS');
-    const blocked = active.filter((i) => i.status === 'ASSIGNED');
-    if (isResp) {
-      return [
-        { label: t('map.toProcess'), value: active.length, variant: 'teal' },
-        { label: t('map.criticalCount'), value: critical.length, variant: 'coral' },
-        { label: t('map.inProgress'), value: inProg.length, variant: 'orange' },
-        { label: t('map.blocked'), value: blocked.length, variant: 'purple' }
-      ];
-    }
-    return [
-      { label: t('map.totalIncidents'), value: active.length, variant: 'teal' },
-      { label: t('map.criticalCount'), value: critical.length, variant: 'coral' },
-      { label: t('map.inProgress'), value: inProg.length, variant: 'orange' },
-      { label: t('map.totalSites'), value: sites.filter((s) => s.isActive).length, variant: 'purple' }
-    ];
-  }, [filteredIncidents, sites, isResp, t]);
+  const mapCenter: [number, number] = useMemo(() => {
+    if (sites.length === 0) return [4.05, 9.70];
+    const avgLat = sites.reduce((sum, s) => sum + s.latitude, 0) / sites.length;
+    const avgLng = sites.reduce((sum, s) => sum + s.longitude, 0) / sites.length;
+    return [avgLat, avgLng];
+  }, [sites]);
 
   const initMap = useCallback(() => {
     if (!ref.current || mapRef.current) return;
-    const map = L.map(ref.current, { zoomControl: false }).setView([4.052, 9.768], 13);
+    const map = L.map(ref.current, { zoomControl: false }).setView(mapCenter, 13);
     const street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
     tileRef.current = street;
     L.control.zoom({ position: 'topright' }).addTo(map);
     mapRef.current = map;
-  }, []);
+    requestAnimationFrame(() => { requestAnimationFrame(() => { map.invalidateSize(); }); });
+  }, [mapCenter]);
 
   useEffect(() => { initMap(); }, [initMap]);
   useEffect(() => {
@@ -150,7 +153,7 @@ export function MapPage() {
     const map = mapRef.current;
     if (!map || !tileRef.current) return;
     map.removeLayer(tileRef.current);
-    const layer = satellite
+    const layer = mapLayer === 'satellite'
       ? L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
           attribution: 'Tiles &copy; Esri'
         })
@@ -159,34 +162,7 @@ export function MapPage() {
         });
     layer.addTo(map);
     tileRef.current = layer;
-  }, [satellite]);
-
-  const myLocation = () => {
-    if (!mapRef.current) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        mapRef.current!.setView([pos.coords.latitude, pos.coords.longitude], 15);
-        L.circleMarker([pos.coords.latitude, pos.coords.longitude], {
-          radius: 8, color: '#2563eb', weight: 2, fillColor: '#2563eb', fillOpacity: 0.3
-        }).addTo(mapRef.current!);
-        setLocating(false);
-      },
-      () => setLocating(false),
-      { timeout: 8000 }
-    );
-  };
-
-  const fitBounds = useCallback((items: { latitude: number; longitude: number }[]) => {
-    const map = mapRef.current;
-    if (!map || items.length === 0) return;
-    if (items.length === 1) {
-      map.setView([items[0].latitude, items[0].longitude], 14);
-      return;
-    }
-    const bounds = L.latLngBounds(items.map((i) => [i.latitude, i.longitude] as [number, number]));
-    map.fitBounds(bounds, { padding: [40, 40] });
-  }, []);
+  }, [mapLayer]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -194,235 +170,208 @@ export function MapPage() {
 
     markersRef.current.forEach((layer) => map.removeLayer(layer));
     markersRef.current.clear();
+    circlesRef.current.forEach((c) => map.removeLayer(c));
+    circlesRef.current.clear();
 
-    sites.forEach((s) => {
-      if (!s.latitude || !s.longitude) return;
-      const activeCount = incidents.filter((i) => i.siteId === s.id && i.status !== 'CLOSED').length;
-      const icon = L.divIcon({
-        className: '',
-        html: `<div class="map-site-marker">${activeCount > 0 ? `<span class="map-site-count">${activeCount}</span>` : ''}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg></div>`,
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
+    if (showSites) {
+      sites.forEach((s) => {
+        if (!s.latitude || !s.longitude) return;
+        const m = L.marker([s.latitude, s.longitude], { icon: createSiteIcon() }).addTo(map);
+        m.bindPopup(`<div style="padding:4px"><strong style="font-size:13px">${escapeHtml(s.name)}</strong><div style="font-size:11px;color:#6b7280;margin-top:2px">${escapeHtml(s.address || '')}${s.city ? ', ' + escapeHtml(s.city) : ''}</div></div>`);
+        markersRef.current.set('site-' + s.id, m);
+
+        const radius = s.radiusMeters && s.radiusMeters > 0 ? s.radiusMeters : 250;
+        if (radius > 0) {
+          const circle = L.circle([s.latitude, s.longitude], {
+            radius,
+            color: '#0F766E',
+            fillColor: '#0F766E',
+            fillOpacity: 0.055,
+            weight: 1.75,
+            dashArray: '7, 5',
+            opacity: 0.85,
+            interactive: false,
+          }).addTo(map);
+          circlesRef.current.set('circle-' + s.id, circle);
+        }
       });
-      const m = L.marker([s.latitude, s.longitude], { icon }).addTo(map);
-      m.bindPopup(`<div class="map-popup site-popup"><div class="map-popup-header">${t('map.siteLabel')}</div><strong>${escapeHtml(s.name)}</strong><div class="map-popup-meta">${escapeHtml(s.address || t('sites.noAddress'))}</div><div class="map-popup-stats">${activeCount} ${t('incidents.total')}</div></div>`);
-      markersRef.current.set('site-' + s.id, m);
-    });
-
-    filteredIncidents.forEach((i) => {
-      const color = PRIORITY_COLORS[i.priority] || '#2563eb';
-      const isSelected = selectedId === i.id;
-      const radius = isSelected ? 10 : 7;
-      const weight = isSelected ? 3 : 2;
-      const cm = L.circleMarker([i.latitude, i.longitude], {
-        radius,
-        color: isSelected ? '#1d4ed8' : '#fff',
-        weight,
-        fillColor: color,
-        fillOpacity: 0.9
-      }).addTo(map);
-
-      const assignedLabel = i.assignedTo ? `${t('map.assignedTo')}: ${escapeHtml(i.assignedTo)}` : t('map.notAssigned');
-      cm.bindPopup(`<div class="map-popup incident-popup"><div class="map-popup-header">${t('map.incidentLabel')} #${i.id.slice(0, 8).toUpperCase()}</div><strong>${escapeHtml(i.title)}</strong><div class="map-popup-badges"><span class="map-popup-priority" style="background:${color}22;color:${color}">${t('priorities.' + i.priority as any)}</span><span class="map-popup-status">${t('incidentStatuses.' + i.status as any)}</span></div><div class="map-popup-row"><span class="map-popup-label">${t('drawer.site')}</span> ${escapeHtml(i.siteName)}</div><div class="map-popup-row"><span class="map-popup-label">${t('map.assignedTo')}</span> ${escapeHtml(i.assignedTo || t('map.notAssigned'))}</div><button class="map-popup-btn" onclick="window.__openDrawer('${i.id}')">${t('map.viewReport')}</button></div>`);
-
-      cm.on('click', () => setSelectedId(i.id));
-      markersRef.current.set('inc-' + i.id, cm);
-    });
-
-    if (filteredIncidents.length > 0) {
-      fitBounds(filteredIncidents);
-    } else if (sites.length > 0) {
-      fitBounds(sites);
     }
-  }, [filteredIncidents, sites, loading, selectedId, fitBounds, t]);
 
-  /* Leaflet popups render as raw HTML. We attach a global handler so the popup's
-     onclick="window.__openDrawer(...)" can trigger React state updates. */
+    if (showIncidents) {
+      filteredIncidents.forEach((i) => {
+        const cm = L.marker([i.latitude, i.longitude], { icon: createIncidentIcon(i.priority) }).addTo(map);
+        const assignedLabel = i.assignedTo || t('map.notAssigned');
+        cm.bindPopup(`<div style="padding:4px;min-width:180px">
+          <div style="font-size:10px;color:#6b7280;font-family:monospace">${escapeHtml(i.siteName)}</div>
+          <strong style="font-size:13px;margin:4px 0;display:block">${escapeHtml(i.title)}</strong>
+          <div style="display:flex;gap:6px;margin:6px 0">
+            <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:${PRIORITY_COLORS_MAP[i.priority] || '#6b7280'}22;color:${PRIORITY_COLORS_MAP[i.priority] || '#6b7280'};font-weight:600">${t('priorities.' + i.priority as any)}</span>
+            <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f1f5f9;color:#475569;font-weight:600">${t('incidentStatuses.' + i.status as any)}</span>
+          </div>
+          <div style="font-size:11px;color:#6b7280">${t('map.assignedTo')}: ${escapeHtml(assignedLabel)}</div>
+          <button style="margin-top:8px;font-size:11px;color:#2563eb;font-weight:600;background:none;border:none;cursor:pointer;padding:0" onclick="window.__openMapDrawer('${i.id}')">${t('map.viewReport')} &rarr;</button>
+        </div>`);
+        markersRef.current.set('inc-' + i.id, cm);
+      });
+    }
+
+    if (filteredIncidents.length > 0 && showIncidents) {
+      const bounds = L.latLngBounds(filteredIncidents.map((i) => [i.latitude, i.longitude] as [number, number]));
+      map.fitBounds(bounds, { padding: [40, 40] });
+    } else if (sites.length > 0 && showSites) {
+      const bounds = L.latLngBounds(sites.map((s) => [s.latitude, s.longitude] as [number, number]));
+      map.fitBounds(bounds, { padding: [40, 40] });
+    }
+  }, [filteredIncidents, sites, loading, showIncidents, showSites, t]);
+
   useEffect(() => {
-    (window as any).__openDrawer = (id: string) => { setDrawerId(id); };
-    return () => { delete (window as any).__openDrawer; };
+    (window as any).__openMapDrawer = (id: string) => { setDrawerId(id); };
+    return () => { delete (window as any).__openMapDrawer; };
   }, []);
 
-  useEffect(() => {
-    if (!selectedId || !mapRef.current) return;
-    const m = markersRef.current.get('inc-' + selectedId);
-    if (m && 'openPopup' in m) {
-      (m as L.Marker).openPopup();
-    }
-  }, [selectedId]);
-
-  const resetFilters = () => {
-    setFilterPriority('');
-    setFilterStatus('');
-    setFilterSite('');
-    setFilterAssignment('');
-    setSearch('');
+  const myLocation = () => {
+    if (!mapRef.current) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        mapRef.current!.setView([pos.coords.latitude, pos.coords.longitude], 15);
+      },
+      () => {},
+      { timeout: 8000 }
+    );
   };
 
-  const hasFilters = filterPriority || filterStatus || filterSite || filterAssignment || search;
-
-  const uniqueSites = useMemo(() => {
-    const map = new Map<string, MapSite>();
-    incidents.forEach((i) => {
-      const s = sites.find((x) => x.id === i.siteId);
-      if (s) map.set(s.id, s);
-    });
-    return Array.from(map.values());
-  }, [incidents, sites]);
-
-  const formatDateFn = useFormatDate();
-
-  const priorityOptions = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
-  const statusOptions = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+  const resetFilters = () => {
+    setStatusFilter('ALL');
+    setPriorityFilter('ALL');
+  };
 
   return (
-    <div className="page opmap-page">
-      <div className="page-heading">
+    <div className="page" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div className="eyebrow"><span className="eyebrow-dot" /> {t('map.eyebrow')}</div>
-          <h1>{t('map.title')}</h1>
-          <p>{isResp ? t('map.subtitleResp') : t('map.subtitle')}</p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-dark)', fontFamily: "'Manrope', sans-serif", margin: 0 }}>{t('map.title')}</h1>
+          <p style={{ fontSize: 13, color: '#94A3B8', marginTop: 4 }}>{t('map.subtitle')}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+              border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 500,
+              background: showFilters ? '#EFF6FF' : '#fff', color: showFilters ? 'var(--blue)' : 'var(--text)',
+              cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            <Filter size={16} /> Filters
+          </button>
+          <button
+            onClick={myLocation}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+              border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 500,
+              background: '#fff', color: 'var(--text)', cursor: 'pointer',
+            }}
+          >
+            <Navigation size={16} /> {t('map.myLocation')}
+          </button>
         </div>
       </div>
 
-      <div className="opmap-kpis">
-        {kpis.map((k, i) => (
-          <div key={i} className={`opmap-kpi opmap-kpi-${k.variant}`}>
-            <span className="opmap-kpi-label">{k.label}</span>
-            <span className="opmap-kpi-value">{String(k.value).padStart(2, '0')}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="opmap-filters">
-        <select className="filter-select" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-          <option value="">{t('map.filterPriority')}</option>
-          {priorityOptions.map((p) => <option key={p} value={p}>{t('priorities.' + p as any)}</option>)}
-        </select>
-        <select className="filter-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="">{t('map.filterStatus')}</option>
-          {statusOptions.map((s) => <option key={s} value={s}>{t('incidentStatuses.' + s as any)}</option>)}
-        </select>
-        <select className="filter-select" value={filterSite} onChange={(e) => setFilterSite(e.target.value)}>
-          <option value="">{t('map.filterSite')}</option>
-          {uniqueSites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        {isResp && (
-          <select className="filter-select" value={filterAssignment} onChange={(e) => setFilterAssignment(e.target.value)}>
-            <option value="">{t('map.filterAssignment')}</option>
-            <option value="mine">{t('map.filterMyInterventions')}</option>
-            <option value="unassigned">{t('map.filterUnassigned')}</option>
+      {showFilters && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '10px 14px', background: '#F8FAFC', borderRadius: 10, border: '1px solid var(--border-light)',
+        }}>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ height: 34, border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, padding: '0 10px', background: '#fff', cursor: 'pointer' }}
+          >
+            <option value="ALL">{t('map.filterStatus')}</option>
+            {['NEW','ASSIGNED','IN_PROGRESS','RESOLVED','CLOSED'].map((s) => (
+              <option key={s} value={s}>{t(`incidentStatuses.${s}` as any)}</option>
+            ))}
           </select>
-        )}
-        <div className="opmap-search">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <input placeholder={t('map.searchPlaceholder')} value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-      </div>
-
-      {loading && (
-        <div className="opmap-loading">
-          <Spinner size={24} />
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+            style={{ height: 34, border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, padding: '0 10px', background: '#fff', cursor: 'pointer' }}
+          >
+            <option value="ALL">{t('map.filterPriority')}</option>
+            {['CRITICAL','HIGH','MEDIUM','LOW'].map((p) => (
+              <option key={p} value={p}>{t(`priorities.${p}` as any)}</option>
+            ))}
+          </select>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
+              <input type="checkbox" checked={showIncidents} onChange={(e) => setShowIncidents(e.target.checked)} style={{ accentColor: 'var(--blue)' }} />
+              <AlertTriangle size={12} /> {t('map.incident')} ({filteredIncidents.length})
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
+              <input type="checkbox" checked={showSites} onChange={(e) => setShowSites(e.target.checked)} style={{ accentColor: 'var(--blue)' }} />
+              <Building2 size={12} /> {t('map.site')} ({sites.length})
+            </label>
+          </div>
         </div>
       )}
 
+      {loading && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner size={24} /></div>
+      )}
+
       {!loading && error && (
-        <div className="opmap-error">
-          <p>{error}</p>
-          <button className="button button-outline" onClick={() => window.location.reload()}>{t('map.retry')}</button>
+        <div className="empty-state">
+          <div className="empty-desc">{error}</div>
+          <button className="button button-outline" onClick={() => window.location.reload()}>{t('common.retry')}</button>
         </div>
       )}
 
       {!loading && !error && (
-        <div className="opmap-layout">
-          <div className="opmap-map-area">
-            <div ref={ref} className="opmap-map" />
-            <div className="map-controls-top-right">
-              <button
-                className={`map-ctrl-btn ${satellite ? 'map-ctrl-active' : ''}`}
-                title={satellite ? t('map.streetView') : t('map.satelliteView')}
-                onClick={() => setSatellite((s) => !s)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-              </button>
-              <button
-                className={`map-ctrl-btn ${locating ? 'map-ctrl-active' : ''}`}
-                title={t('map.myLocation')}
-                onClick={myLocation}
-                disabled={locating}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/></svg>
-              </button>
-            </div>
-            <div className="opmap-legend">
-              <div className="opmap-legend-title">{t('map.legend')}</div>
-              <div className="opmap-legend-section">
-                <div className="opmap-legend-subtitle">{t('map.legendPriority')}</div>
-                {priorityOptions.map((p) => (
-                  <div key={p} className="opmap-legend-item">
-                    <span className="map-dot" style={{ background: PRIORITY_COLORS[p] }} />
-                    <span>{t('priorities.' + p as any)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="opmap-legend-section">
-                <div className="opmap-legend-subtitle">{t('map.legendType')}</div>
-                <div className="opmap-legend-item">
-                  <span className="map-site-marker-sm" />
-                  <span>{t('map.site')}</span>
-                </div>
-                <div className="opmap-legend-item">
-                  <span className="map-dot" style={{ background: '#2563EB' }} />
-                  <span>{t('map.incident')}</span>
-                </div>
-              </div>
-            </div>
+        <div style={{ position: 'relative', height: 'calc(100vh - 240px)', minHeight: 400, borderRadius: 12, overflow: 'hidden', background: '#e2e8f0' }}>
+          <div ref={ref} style={{ height: '100%', width: '100%' }} />
+
+          <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(4px)', borderRadius: 8, padding: '8px 12px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
+              {filteredIncidents.length} {t('incidents.total')} &middot; {sites.length} {t('map.site')}
+            </span>
           </div>
 
-          <div className="opmap-panel">
-            <div className="opmap-panel-header">
-              <h3>{isResp ? t('map.interventions') : t('map.totalIncidents')}</h3>
-              <span className="opmap-panel-count">{filteredIncidents.length}</span>
+          <button
+            onClick={() => setMapLayer(mapLayer === 'standard' ? 'satellite' : 'standard')}
+            style={{
+              position: 'absolute', top: 12, right: 12, zIndex: 1000,
+              background: '#fff', borderRadius: 8, padding: 8, border: 'none',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)', cursor: 'pointer',
+            }}
+            title={mapLayer === 'satellite' ? 'Street view' : 'Satellite view'}
+          >
+            <Layers size={18} color="#475569" />
+          </button>
+
+          <div style={{
+            position: 'absolute', bottom: 12, left: 12, zIndex: 1000,
+            background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(4px)',
+            borderRadius: 8, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+              {t('map.legend')}
             </div>
-
-            {filteredIncidents.length === 0 && !hasFilters && incidents.length === 0 && (
-              <div className="opmap-empty">
-                <p>{t('map.noIncidentsToDisplay')}</p>
+            {(['CRITICAL','HIGH','MEDIUM','LOW'] as const).map((p) => (
+              <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569', marginBottom: 4 }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: PRIORITY_COLORS_MAP[p], border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+                {t(`priorities.${p}` as any)}
               </div>
-            )}
-
-            {filteredIncidents.length === 0 && hasFilters && (
-              <div className="opmap-empty">
-                <p>{t('map.noIncidentsMatchFilters')}</p>
-                <button className="button button-outline button-small" onClick={resetFilters}>{t('map.resetFilters')}</button>
-              </div>
-            )}
-
-            <div className="opmap-panel-list">
-              {filteredIncidents.map((i) => (
-                <div
-                  key={i.id}
-                  className={`opmap-panel-item ${selectedId === i.id ? 'opmap-panel-item-active' : ''}`}
-                  onClick={() => { setSelectedId(i.id); setDrawerId(i.id); }}
-                >
-                  <div className="opmap-panel-item-top">
-                    <span className="opmap-panel-dot" style={{ background: PRIORITY_COLORS[i.priority] }} />
-                    <span className="opmap-panel-priority">{t('priorities.' + i.priority as any)}</span>
-                    <span className="opmap-panel-status">{t('incidentStatuses.' + i.status as any)}</span>
-                  </div>
-                  <div className="opmap-panel-title">{i.title}</div>
-                  <div className="opmap-panel-meta">{i.siteName}</div>
-                  {i.assignedTo && <div className="opmap-panel-assigned">{t('map.assignedTo')}: {i.assignedTo}</div>}
-                  <div className="opmap-panel-date">{formatDateFn(i.createdAt)}</div>
-                </div>
-              ))}
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569', marginTop: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#3B82F6', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+              {t('map.site')}
             </div>
           </div>
         </div>
       )}
 
       {drawerId && (
-        <Drawer id={drawerId} onClose={() => { setDrawerId(null); setSelectedId(null); }} />
+        <Drawer id={drawerId} onClose={() => setDrawerId(null)} />
       )}
     </div>
   );

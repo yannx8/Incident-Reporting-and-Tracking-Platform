@@ -49,6 +49,7 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
   const [searchCand, setSearchCand] = useState('');
   const [candOpen, setCandOpen] = useState(false);
   const [newSpecialty, setNewSpecialty] = useState('');
+  const [addingSpecialty, setAddingSpecialty] = useState(false);
   const [apiErr, setApiErr] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState('');
@@ -74,7 +75,12 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
 
   const addSpecialty = async () => {
     const name = newSpecialty.trim();
-    if (name.length < 2) return;
+    if (name.length < 2) {
+      setApiErr(t('team.specialtyNameError'));
+      return;
+    }
+    setAddingSpecialty(true);
+    setApiErr('');
     try {
       const s = await api<Specialty>('/responsables/specialties', { method: 'POST', body: JSON.stringify({ name }) });
       setSpecialties((prev) => (prev.some((x) => x.id === s.id) ? prev : [...prev, s]));
@@ -82,6 +88,8 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
       setNewSpecialty('');
     } catch (err: any) {
       setApiErr(err.message || t('common.error'));
+    } finally {
+      setAddingSpecialty(false);
     }
   };
 
@@ -215,7 +223,7 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
                     onChange={(e) => setNewSpecialty(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSpecialty(); } }}
                   />
-                  <button className="button button-outline button-small" type="button" onClick={addSpecialty}>
+                  <button className="button button-outline button-small" type="button" onClick={addSpecialty} disabled={addingSpecialty}>
                     <UserPlus size={13} /> {t('team.addSpecialty')}
                   </button>
                 </div>

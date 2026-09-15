@@ -72,9 +72,7 @@ function UserDashboard() {
           <h1>{greeting}, {u.name.split(' ')[0]} <span className="wave">&#10022;</span></h1>
           <p>{t('dashboard.userSubtitle')}</p>
         </div>
-        <button className="button button-primary button-lg" onClick={() => nav('/incidents?new=1')}>
-          <Plus size={18} /> {t('dashboard.reportIncident')}
-        </button>
+        <button onClick={() => nav('/incidents?new=1')} className="flex items-center gap-2 px-5 py-3 bg-nexus-600 text-white rounded-xl font-semibold text-sm hover:bg-nexus-700 transition-colors shadow-sm flex-shrink-0"><Plus size={18} /><span className="hidden sm:inline">Report incident</span></button>
       </div>
 
       {loading && (
@@ -337,9 +335,7 @@ function AdminDashboard() {
           <h1>{greeting}, {u.name.split(' ')[0]}</h1>
           <p>{t('dashboard.adminSubtitle')}</p>
         </div>
-        <button className="button button-primary button-lg" onClick={() => nav('/incidents?new=1')}>
-          <Plus size={18} /> {t('dashboard.reportIncident')}
-        </button>
+        <button onClick={() => nav('/incidents?new=1')} className="flex items-center gap-2 px-5 py-3 bg-nexus-600 text-white rounded-xl font-semibold text-sm hover:bg-nexus-700 transition-colors shadow-sm flex-shrink-0"><Plus size={18} /><span className="hidden sm:inline">Report incident</span></button>
       </div>
 
       <div className="kpi-grid">
@@ -454,3 +450,4 @@ function AdminDashboard() {
     </div>
   );
 }
+

@@ -1,170 +1,117 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Globe, Bell, Shield, Check } from 'lucide-react';
+import { User, Bell, Shield, Globe, Palette, ChevronRight, Save } from 'lucide-react';
 import { useAuth } from '../../store/authStore';
-import { useI18n, type Locale } from '../../i18n';
+import { useI18n } from '../../i18n';
+import { Toast } from '../shared/Toast';
 
-export function SettingsPage() {
-  const nav = useNavigate();
+const settingsSections = [
+  {
+    titleKey: 'settings.account',
+    items: [
+      { icon: User, labelKey: 'settings.profile', descKey: 'settings.profileDesc' },
+      { icon: Bell, labelKey: 'settings.notifications', descKey: 'settings.notificationsDesc' },
+      { icon: Shield, labelKey: 'settings.security', descKey: 'settings.securityDesc' },
+    ],
+  },
+  {
+    titleKey: 'settings.organization',
+    items: [
+      { icon: Globe, labelKey: 'settings.general', descKey: 'settings.generalDesc' },
+      { icon: Palette, labelKey: 'settings.appearance', descKey: 'settings.appearanceDesc' },
+    ],
+  },
+];
+
+export function Settings() {
   const u = useAuth((s) => s.user)!;
   const { locale, setLocale } = useI18n();
   const t = useI18n((s) => s.t);
-
-  const [saved, setSaved] = useState(false);
-  const [notifInApp, setNotifInApp] = useState(true);
-  const [notifEmail, setNotifEmail] = useState(false);
-
-  const roleLabel: Record<string, string> = {
-    ADMINISTRATOR: t('roles.ADMINISTRATOR'),
-    RESPONSABLE: t('roles.RESPONSABLE'),
-    USER: t('roles.USER')
-  };
-
-  /* Notification toggles are client-only for now (no backend persistence). */
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleLanguageChange = (newLocale: Locale) => {
-    setLocale(newLocale);
-  };
+  const [toast, setToast] = useState('');
+  const initials = u.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+  const roleLabel: Record<string, string> = { ADMINISTRATOR: 'Admin', RESPONSABLE: 'Responsable', USER: 'User' };
 
   return (
-    <div className="page-container">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-        <button className="icon-button" onClick={() => nav(-1)}>
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h1 className="page-title" style={{ marginBottom: 0 }}>{t('settings.title')}</h1>
-          <p className="page-subtitle">{t('settings.subtitle')}</p>
+    <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 24, animation: 'page-in 0.25s ease both', maxWidth: 640 }}>
+      <div>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0f172a', fontFamily: "'Manrope', sans-serif", margin: 0 }}>{t('nav.settings')}</h1>
+        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{t('settings.subtitle')}</p>
+      </div>
+
+      <div className="card" style={{ padding: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#2563EB', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 18, flexShrink: 0 }}>
+            {initials}
+          </div>
+          <div>
+            <h3 style={{ fontSize: 17, fontWeight: 600, color: '#0f172a', margin: 0 }}>{u.name}</h3>
+            <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{u.email}</p>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, padding: '3px 10px', borderRadius: 999, background: '#EFF6FF', color: '#1D4ED8', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {roleLabel[u.roles[0]] || u.roles[0]}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="settings-sections">
-        {/* Profile */}
-        <div className="settings-card">
-          <div className="settings-card-header">
-            <User size={18} />
-            <div>
-              <h3>{t('settings.profile')}</h3>
-              <p>{t('settings.profileDesc')}</p>
-            </div>
-          </div>
-          <div className="settings-card-body">
-            <div className="settings-row">
-              <label className="settings-label">{t('settings.fullName')}</label>
-              <div className="settings-value">{u.name}</div>
-            </div>
-            <div className="settings-row">
-              <label className="settings-label">{t('settings.email')}</label>
-              <div className="settings-value">{u.email}</div>
-            </div>
-            <div className="settings-row">
-              <label className="settings-label">{t('settings.role')}</label>
-              <div className="settings-value">{roleLabel[u.roles[0]] || u.roles[0]}</div>
-            </div>
-            <div className="settings-row">
-              <label className="settings-label">{t('settings.organization')}</label>
-              <div className="settings-value">{u.organizationName}</div>
-            </div>
-            <div className="settings-card-footer">
-              <button className="btn btn-ghost" onClick={() => nav('/profile')}>{t('settings.profile')}</button>
-            </div>
-          </div>
-        </div>
-
-        {/* Language */}
-        <div className="settings-card">
-          <div className="settings-card-header">
-            <Globe size={18} />
-            <div>
-              <h3>{t('settings.language')}</h3>
-              <p>{t('settings.languageDesc')}</p>
-            </div>
-          </div>
-          <div className="settings-card-body">
-            <div className="settings-lang-options">
-              <button
-                className={`settings-lang-btn ${locale === 'fr' ? 'settings-lang-active' : ''}`}
-                onClick={() => handleLanguageChange('fr')}
-              >
-                <span className="settings-lang-flag">🇫🇷</span>
-                <span>Français</span>
-                {locale === 'fr' && <Check size={16} />}
-              </button>
-              <button
-                className={`settings-lang-btn ${locale === 'en' ? 'settings-lang-active' : ''}`}
-                onClick={() => handleLanguageChange('en')}
-              >
-                <span className="settings-lang-flag">🇬🇧</span>
-                <span>English</span>
-                {locale === 'en' && <Check size={16} />}
-              </button>
-            </div>
+      {settingsSections.map((section) => (
+        <div key={section.titleKey}>
+          <h2 style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>{t(section.titleKey)}</h2>
+          <div className="card" style={{ overflow: 'hidden' }}>
+            {section.items.map((item, i) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.labelKey}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px',
+                    background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+                    borderBottom: i < section.items.length - 1 ? '1px solid #f1f5f9' : 'none',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <div style={{ width: 36, height: 36, background: '#f1f5f9', borderRadius: 10, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <Icon size={18} color="#64748b" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', margin: 0 }}>{t(item.labelKey)}</p>
+                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{t(item.descKey)}</p>
+                  </div>
+                  <ChevronRight size={16} color="#94A3B8" />
+                </button>
+              );
+            })}
           </div>
         </div>
+      ))}
 
-        {/* Notifications */}
-        <div className="settings-card">
-          <div className="settings-card-header">
-            <Bell size={18} />
-            <div>
-              <h3>{t('settings.notifications')}</h3>
-              <p>{t('settings.notificationsDesc')}</p>
-            </div>
-          </div>
-          <div className="settings-card-body">
-            <div className="settings-toggle-row">
-              <label>{t('settings.inAppNotifications')}</label>
+      <div>
+        <h2 style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>{t('settings.language')}</h2>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {(['en', 'fr'] as const).map((l) => (
               <button
-                className={`settings-toggle ${notifInApp ? 'settings-toggle-on' : ''}`}
-                onClick={() => setNotifInApp(!notifInApp)}
+                key={l}
+                onClick={() => { setLocale(l); setToast(t('settings.saved')); }}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
+                  border: locale === l ? '2px solid #2563EB' : '1px solid #e2e8f0',
+                  borderRadius: 10, background: locale === l ? '#f0f7ff' : '#fff',
+                  cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                  color: locale === l ? '#2563EB' : '#475569', transition: 'all 0.15s',
+                }}
               >
-                <div className="settings-toggle-thumb" />
+                <span style={{ fontSize: 20 }}>{l === 'en' ? '\uD83C\uDDFA\uD83C\uDDF8' : '\uD83C\uDDEB\uD83C\uDDF7'}</span>
+                {l === 'en' ? 'English' : 'Fran\u00e7ais'}
               </button>
-            </div>
-            <div className="settings-toggle-row">
-              <label>{t('settings.emailNotifications')}</label>
-              <button
-                className={`settings-toggle ${notifEmail ? 'settings-toggle-on' : ''}`}
-                onClick={() => setNotifEmail(!notifEmail)}
-              >
-                <div className="settings-toggle-thumb" />
-              </button>
-            </div>
+            ))}
           </div>
         </div>
-
-        {/* Security */}
-        <div className="settings-card">
-          <div className="settings-card-header">
-            <Shield size={18} />
-            <div>
-              <h3>{t('settings.security')}</h3>
-              <p>{t('settings.securityDesc')}</p>
-            </div>
-          </div>
-          <div className="settings-card-body">
-            <div className="settings-row">
-              <label className="settings-label">{t('settings.changePassword')}</label>
-              <button className="btn btn-ghost">{t('settings.changePassword')}</button>
-            </div>
-            <div className="settings-row">
-              <label className="settings-label">{t('settings.activeSessions')}</label>
-              <span className="settings-value-muted">1</span>
-            </div>
-          </div>
-        </div>
-
-        {saved && (
-          <div className="settings-saved-toast">
-            <Check size={16} />
-            {t('settings.saved')}
-          </div>
-        )}
       </div>
+
+      {toast && <Toast message={toast} onClose={() => setToast('')} />}
     </div>
   );
 }
+
+export { Settings as SettingsPage };
