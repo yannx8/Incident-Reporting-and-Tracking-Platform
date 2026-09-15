@@ -25,7 +25,11 @@ function perimeterData(body: any) {
 router.get('/', async (req: any, res, next) => {
   try {
     const a = ctx(req);
-    res.json(await prisma.site.findMany({ where: { organizationId: a.organizationId }, orderBy: { name: 'asc' } }));
+    res.json(await prisma.site.findMany({
+      where: { organizationId: a.organizationId },
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { incidents: true } } }
+    }));
   } catch (e) {
     next(e);
   }

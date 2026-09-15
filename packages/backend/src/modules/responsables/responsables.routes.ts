@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { UserRole } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/errors.js';
 import { requireRole } from '../../middleware/requireRole.js';
@@ -130,12 +131,14 @@ router.post('/', requireRole('ADMINISTRATOR'), async (req: any, res, next) => {
       create: { organizationId: a.organizationId, userId },
       update: { isActive: true }
     });
-    // Force the RESPONSABLE role onto the membership. Using `set` replaces all
-    // roles, so we include USER as the base role to avoid accidentally removing
-    // it from an admin who also gets promoted to responsables.
+    // `set` replaces the complete role collection, so preserve every role that
+    // already exists and only add RESPONSABLE when it is absent.
+    const updatedRoles = membership.roles.includes(UserRole.RESPONSABLE)
+      ? membership.roles
+      : [...membership.roles, UserRole.RESPONSABLE];
     await prisma.organizationMembership.update({
       where: { organizationId_userId: { organizationId: a.organizationId, userId } },
-      data: { roles: { set: ['USER', 'RESPONSABLE'] } }
+      data: { roles: { set: updatedRoles } }
     });
     res.status(201).json(r);
   } catch (e) {

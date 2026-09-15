@@ -43,6 +43,7 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUserId, setSelectedUserId] = useState(record?.user.id || '');
+  const [memberTouched, setMemberTouched] = useState(false);
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([]);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
   const [isActive, setIsActive] = useState(record?.isActive ?? true);
@@ -66,6 +67,16 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
     setSelectedSpecialties(record.specialties.map((s) => s.specialty.id));
     setSelectedSites(record.sites.map((s) => s.site.id));
   }, [record]);
+
+  useEffect(() => {
+    document.body.classList.add('no-scroll');
+    const handleKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.classList.remove('no-scroll');
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   const toggleSpecialty = (id: string) =>
     setSelectedSpecialties((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -99,6 +110,7 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
 
   const submit = async () => {
     if (mode === 'create' && !selectedUserId) {
+      setMemberTouched(true);
       setApiErr(t('team.selectMember'));
       return;
     }
@@ -128,10 +140,10 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="create-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+      <div className="create-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }} role="dialog" aria-modal="true" aria-labelledby="team-modal-title">
         <div className="modal-header">
           <div>
-            <h2>{mode === 'create' ? t('team.add') : t('team.edit')}</h2>
+            <h2 id="team-modal-title">{mode === 'create' ? t('team.add') : t('team.edit')}</h2>
             <div className="modal-subtitle">
               {mode === 'create' ? t('team.createSubtitle') : t('team.editSubtitle')}
             </div>
@@ -177,7 +189,7 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
                             <button
                               key={c.id}
                               className="candidate-item"
-                              onClick={() => { setSelectedUserId(c.id); setCandOpen(false); }}
+                              onClick={() => { setSelectedUserId(c.id); setMemberTouched(false); setCandOpen(false); }}
                               type="button"
                             >
                               {selectedUserId === c.id && <Check size={14} className="candidate-check" />}
@@ -191,7 +203,7 @@ export function TeamFormModal({ mode, record, onClose, onSaved }: TeamFormModalP
                       </div>
                     )}
                   </div>
-                  {!selectedUserId && <div className="form-error" style={{ marginTop: 4 }}>{t('team.selectMember')}</div>}
+                  {memberTouched && !selectedUserId && <div className="form-error" style={{ marginTop: 4 }}>{t('team.selectMember')}</div>}
                 </div>
               ) : (
                 <div className="form-field span-full">

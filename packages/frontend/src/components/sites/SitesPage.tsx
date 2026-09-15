@@ -133,8 +133,12 @@ function SiteModal({ mode, site, onClose, onSaved }: SiteModalProps) {
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.body.classList.add('no-scroll');
     document.addEventListener('keydown', h);
-    return () => document.removeEventListener('keydown', h);
+    return () => {
+      document.body.classList.remove('no-scroll');
+      document.removeEventListener('keydown', h);
+    };
   }, [onClose]);
 
   const validate = () => {
